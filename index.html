@@ -1,0 +1,2787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audio Inspector — Online Audio Analyzer, Header Inspector &amp; Compressor</title>
+<meta name="description" content="Inspect audio files entirely in your browser: format detection, container &amp; codec header parsing with a linked hex view, waveform / spectrum / level analysis, demo files in 10+ formats, and compression powered by ffmpeg.wasm. 100% client-side.">
+<link rel="canonical" href="https://tliens.github.io/audio-inspector/">
+<link rel="alternate" hreflang="en" href="https://tliens.github.io/audio-inspector/">
+<link rel="alternate" hreflang="zh" href="https://tliens.github.io/audio-inspector/?lang=zh">
+<link rel="alternate" hreflang="x-default" href="https://tliens.github.io/audio-inspector/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Audio Inspector">
+<meta property="og:title" content="Audio Inspector — Online Audio Analyzer, Header Inspector &amp; Compressor">
+<meta property="og:description" content="Format detection, header parsing with hex view, waveform / spectrum / level analysis, demo files, ffmpeg.wasm compression — all in your browser, nothing uploaded.">
+<meta property="og:url" content="https://tliens.github.io/audio-inspector/">
+<meta property="og:image" content="https://tliens.github.io/audio-inspector/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Audio Inspector — Online Audio Analyzer &amp; Compressor">
+<meta name="twitter:description" content="Audio format analysis, header/hex inspection, waveform &amp; spectrum, demo files and compression — 100% client-side.">
+<meta name="twitter:image" content="https://tliens.github.io/audio-inspector/og-image.png">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f46e5'/%3E%3Cg fill='white'%3E%3Crect x='10' y='26' width='5' height='12' rx='2.5'/%3E%3Crect x='19' y='18' width='5' height='28' rx='2.5'/%3E%3Crect x='28' y='8' width='5' height='48' rx='2.5'/%3E%3Crect x='37' y='16' width='5' height='32' rx='2.5'/%3E%3Crect x='46' y='24' width='5' height='16' rx='2.5'/%3E%3C/g%3E%3C/svg%3E">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebApplication","name":"Audio Inspector","url":"https://tliens.github.io/audio-inspector/","applicationCategory":"DeveloperApplication","operatingSystem":"Any (browser)","description":"Free online audio debugging tool for developers: audio format analysis, file header parsing with hex view, waveform, spectrum and level analysis, multi-format demo downloads and audio compression via ffmpeg.wasm. Runs 100% client-side.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Audio format detection","Container and codec header parsing","Hex viewer with structure linking","Waveform and spectrogram","Peak/RMS/clipping/DC offset analysis","Demo audio files in 10+ formats","Audio compression and format conversion via ffmpeg.wasm"]}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Are my audio files uploaded to a server?","acceptedAnswer":{"@type":"Answer","text":"No. All parsing, decoding, visualization and compression run locally in your browser. Files never leave your device. The only network request is downloading the optional ffmpeg.wasm engine (~31 MB) from a public CDN when you first use the compressor."}},
+{"@type":"Question","name":"Which audio formats can be analyzed?","acceptedAnswer":{"@type":"Answer","text":"Header parsing supports WAV/RIFF, AIFF/AIFC, MP3 (ID3v1/v2, MPEG frames, Xing/LAME), FLAC, Ogg (Vorbis, Opus, embedded FLAC), MP4/M4A (AAC, ALAC, Opus, FLAC), Matroska/WebM, ADTS AAC, AMR, WMA/ASF, Sun AU and CAF. Waveform and level statistics additionally require the browser to decode the file (Chrome/Edge/Firefox support most formats; Safari cannot decode Ogg/Opus)."}},
+{"@type":"Question","name":"Why does my Ogg or Opus file show no waveform in Safari?","acceptedAnswer":{"@type":"Answer","text":"Safari's decodeAudioData does not support the Ogg container. Audio Inspector falls back to header-only mode: you still get container structure, codec parameters and the hex view, but no waveform or level stats."}},
+{"@type":"Question","name":"What engine powers the compression feature?","acceptedAnswer":{"@type":"Answer","text":"ffmpeg.wasm, the official WebAssembly build of FFmpeg, loaded on demand from a CDN with fallback mirrors. It supports MP3 (CBR/VBR, LAME), AAC/M4A, Ogg Vorbis, Opus, WebM/Opus, FLAC and WAV output with bitrate, sample-rate, channel and loudness-normalization options."}},
+{"@type":"Question","name":"How is the bitrate value computed?","acceptedAnswer":{"@type":"Answer","text":"When the header declares a bitrate (CBR MP3, MP4 avgBitrate, ASF max bitrate, Xing VBR average), that value is shown. Otherwise bitrate is computed as fileSize x 8 / decoded duration and labeled as computed."}},
+{"@type":"Question","name":"Why is my Opus file 48 kHz when the source was 44.1 kHz?","acceptedAnswer":{"@type":"Answer","text":"Opus always decodes to 48 kHz internally; the original sample rate is only stored as metadata (input sample rate in OpusHead). Audio Inspector shows both the container value and the decoded value."}}
+]}
+</script>
+<style>
+:root{
+  --bg:#f5f6f9; --panel:#ffffff; --panel2:#f0f2f6; --text:#171c28; --muted:#5c6575;
+  --border:#e2e6ee; --accent:#4f46e5; --accent2:#0891b2; --ok:#15803d; --warn:#b45309; --err:#dc2626;
+  --chip:#eef0f6; --code-bg:#0f1420; --code-tx:#dbe4f3; --shadow:0 1px 2px rgba(15,20,35,.06),0 8px 24px -12px rgba(15,20,35,.12);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;
+}
+html[data-theme="dark"]{
+  --bg:#0c1017; --panel:#131926; --panel2:#1a2130; --text:#e7ecf5; --muted:#93a0b4;
+  --border:#28324a; --accent:#818cf8; --accent2:#22d3ee; --ok:#4ade80; --warn:#fbbf24; --err:#f87171;
+  --chip:#1d2536; --code-bg:#0a0e18; --code-tx:#c9d6ec; --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -12px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+h1,h2,h3{line-height:1.25}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.mono{font-family:var(--mono)}
+/* header */
+header.site{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+.site-in{display:flex;align-items:center;gap:18px;height:56px}
+.logo{display:flex;align-items:center;gap:9px;font-weight:700;font-size:16px;color:var(--text);text-decoration:none}
+.logo:hover{text-decoration:none}
+.logo svg{display:block}
+nav.main{display:flex;gap:4px;margin-left:6px}
+nav.main a{color:var(--muted);padding:6px 10px;border-radius:8px;font-size:14px}
+nav.main a:hover{color:var(--text);background:var(--chip);text-decoration:none}
+.hspace{flex:1}
+.iconbtn{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:6px 11px;cursor:pointer;font-size:13px;line-height:1}
+.iconbtn:hover{border-color:var(--accent)}
+.ghlink{display:inline-flex;align-items:center;gap:7px}
+/* hero */
+.hero{padding:44px 0 10px}
+.hero h1{font-size:34px;margin:0 0 10px;letter-spacing:-.02em}
+.hero h1 .grad{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p.sub{font-size:16.5px;color:var(--muted);max-width:840px;margin:0 0 16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border:1px solid var(--border);color:var(--muted);border-radius:999px;padding:4px 12px;font-size:12.5px}
+.chip b{color:var(--text);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--muted)}
+.dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.err{background:var(--err)} .dot.run{background:var(--accent);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.35}}
+/* sections */
+section{padding:34px 0}
+h2.sec{font-size:24px;margin:0 0 6px;letter-spacing:-.01em}
+p.secdesc{color:var(--muted);margin:0 0 20px;max-width:860px}
+/* dropzone */
+.drop{border:2px dashed var(--border);border-radius:16px;background:var(--panel);padding:38px 20px;text-align:center;cursor:pointer;transition:border-color .15s, background .15s;box-shadow:var(--shadow)}
+.drop:hover,.drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,var(--panel))}
+.drop .big{font-size:17px;font-weight:600;margin:10px 0 4px}
+.drop .hint{color:var(--muted);font-size:13.5px}
+.drop .fmts{margin-top:12px;font-size:12px;color:var(--muted);font-family:var(--mono);opacity:.85}
+/* chips row */
+#fileChips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+.fchip{display:inline-flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:6px 10px;font-size:13px;cursor:pointer;max-width:300px}
+.fchip.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.fchip .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:12.5px}
+.fchip .x{color:var(--muted);cursor:pointer;padding:0 2px;border-radius:4px}
+.fchip .x:hover{color:var(--err)}
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:18px 0 0;overflow-x:auto}
+.tab{appearance:none;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:9px 14px;font-size:14px;cursor:pointer;white-space:nowrap}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.panel{display:none;padding-top:18px}
+.panel.active{display:block}
+.empty{color:var(--muted);text-align:center;padding:40px 0;border:1px dashed var(--border);border-radius:14px}
+/* cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;margin:8px 0 14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow)}
+.card .k{font-size:12px;color:var(--muted);margin-bottom:2px;display:flex;align-items:center;gap:6px}
+.card .v{font-size:17px;font-weight:650;font-family:var(--mono);word-break:break-all}
+.card .v small{font-size:12px;color:var(--muted);font-weight:400;word-break:normal;display:inline-block}
+.badge{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid var(--border);background:var(--chip);color:var(--muted);vertical-align:middle}
+.badge.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent);background:color-mix(in srgb,var(--ok) 10%,transparent)}
+.badge.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);background:color-mix(in srgb,var(--warn) 10%,transparent)}
+.badge.err{color:var(--err);border-color:color-mix(in srgb,var(--err) 40%,transparent);background:color-mix(in srgb,var(--err) 10%,transparent)}
+.badge.acc{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+/* sub blocks */
+.subblock{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:12px 0;box-shadow:var(--shadow)}
+.subblock h3{margin:0 0 10px;font-size:14.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+table.kv{width:100%;border-collapse:collapse;font-size:13.5px}
+table.kv td{padding:5px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+table.kv tr:last-child td{border-bottom:none}
+table.kv td:first-child{color:var(--muted);width:38%;min-width:130px}
+table.kv td:last-child{font-family:var(--mono);font-size:12.8px;word-break:break-all}
+.note{border-left:3px solid var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13.5px;margin:8px 0}
+.note.err{border-left-color:var(--err);background:color-mix(in srgb,var(--err) 8%,transparent)}
+.note.ok{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,transparent)}
+.btn{appearance:none;border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:9px;padding:7px 14px;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.small{padding:4px 10px;font-size:12.5px;border-radius:7px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.structchips{display:flex;flex-wrap:wrap;gap:6px}
+.schip{font-family:var(--mono);font-size:12px;background:var(--chip);border:1px solid var(--border);border-radius:7px;padding:3px 9px;cursor:pointer}
+.schip:hover{border-color:var(--accent);color:var(--accent)}
+/* wave tab */
+.wavebar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+.timelab{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.cvbox{background:var(--code-bg);border:1px solid var(--border);border-radius:12px;overflow:hidden;position:relative}
+canvas{display:block;width:100%}
+#wfCv{cursor:crosshair}
+.cvnote{position:absolute;right:10px;top:8px;font-size:11px;color:#7d8aa5;font-family:var(--mono);pointer-events:none}
+#selInfo{font-size:13px;color:var(--muted);margin-top:8px;min-height:20px;font-family:var(--mono)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+/* hex */
+.hexwrap{display:grid;grid-template-columns:300px 1fr;gap:14px}
+@media(max-width:860px){.hexwrap{grid-template-columns:1fr}}
+.treebox{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px 8px;max-height:640px;overflow:auto;font-size:13px}
+.treebox details{margin-left:0}
+.treebox details details{margin-left:14px}
+.treebox summary{cursor:pointer;list-style:none;display:flex;align-items:baseline;gap:8px;padding:3px 6px;border-radius:6px;flex-wrap:wrap}
+.treebox summary:hover{background:var(--chip)}
+.treebox summary.hl,.tnode.hl{outline:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.treebox summary .tl{font-family:var(--mono);font-weight:600}
+.treebox summary .ts{color:var(--muted);font-size:11.5px;font-family:var(--mono)}
+.treebox .fields{padding:2px 6px 6px 22px}
+.treebox .fields div{display:flex;gap:10px;font-size:12px;padding:1px 0}
+.treebox .fields .fk{color:var(--muted);min-width:130px}
+.treebox .fields .fv{font-family:var(--mono);word-break:break-all}
+.hexbox{background:var(--code-bg);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.hexbar{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap;background:var(--panel)}
+.hexbar input{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:4px 8px;font-family:var(--mono);font-size:12.5px;width:110px}
+.hexszs{display:flex;gap:4px}
+.hexszs button{background:var(--panel2);border:1px solid var(--border);color:var(--muted);font-size:11.5px;padding:3px 8px;border-radius:6px;cursor:pointer;font-family:var(--mono)}
+.hexszs button.active{color:var(--accent);border-color:var(--accent)}
+#hexScroll{overflow:auto;max-height:560px;padding:8px 12px}
+.hrow{font-family:var(--mono);font-size:12.5px;line-height:20px;white-space:pre;color:var(--code-tx);cursor:pointer}
+.hrow:hover{background:rgba(128,150,200,.08)}
+.hrow .ho{color:#5f6f92;padding-right:14px}
+.hrow .hh{color:#a9c1e8}
+.hrow .ha{color:#6d7ba0;padding-left:14px}
+.hrow i{font-style:normal;background:color-mix(in srgb,var(--accent) 38%,transparent);color:#fff;border-radius:3px}
+#hexStatus{padding:6px 12px;border-top:1px solid var(--border);color:var(--muted);font-size:12px;font-family:var(--mono);display:flex;gap:14px;flex-wrap:wrap}
+/* compress */
+.engcard{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin:0 0 14px;box-shadow:var(--shadow)}
+.engcard .gr{flex:1;min-width:200px}
+.engcard .et{font-size:14px;font-weight:600}
+.engcard .ed{font-size:12.5px;color:var(--muted)}
+.bar{height:7px;background:var(--panel2);border-radius:99px;overflow:hidden;margin-top:6px}
+.bar>div{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%;transition:width .2s;border-radius:99px}
+.setgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:12px 0}
+.setrow{display:flex;flex-direction:column;gap:5px;font-size:13px}
+.setrow label{color:var(--muted);font-size:12.5px;display:flex;justify-content:space-between;align-items:center}
+.setrow select,.setrow input[type=number]{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 9px;font-size:13.5px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px}
+.cmdbox{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:11px 13px;font-family:var(--mono);font-size:12.5px;color:var(--code-tx);word-break:break-all;position:relative}
+.cmdbox .copy{position:absolute;top:7px;right:8px}
+table.queue{width:100%;border-collapse:collapse;font-size:13px}
+table.queue th{text-align:left;color:var(--muted);font-weight:500;font-size:12px;padding:6px 8px;border-bottom:1px solid var(--border)}
+table.queue td{padding:7px 8px;border-bottom:1px solid var(--border)}
+table.queue tr:last-child td{border-bottom:none}
+table.queue .nm{font-family:var(--mono);font-size:12.3px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#compLog{display:none;background:var(--code-bg);color:var(--code-tx);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-family:var(--mono);font-size:11.5px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:10px 0}
+.rescard{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:10px 0;box-shadow:var(--shadow)}
+.rescard .r1{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.rescard .rn{font-family:var(--mono);font-size:13px;font-weight:600}
+.rescard audio{height:34px;max-width:100%}
+.ab{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
+.ab label{font-size:11.5px;color:var(--muted);display:block;margin-bottom:2px}
+/* demos */
+.dgroup{margin:22px 0 8px}
+.dgroup h3{font-size:16px;margin:0 0 2px}
+.dgroup p{color:var(--muted);font-size:13.5px;margin:0 0 10px}
+table.demos{width:100%;border-collapse:collapse;font-size:13px;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+table.demos th{text-align:left;padding:9px 12px;font-size:12px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap}
+table.demos td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+table.demos tr:last-child td{border-bottom:none}
+table.demos tr:hover td{background:color-mix(in srgb,var(--accent) 4%,transparent)}
+table.demos .fn{font-family:var(--mono);font-size:12.5px;font-weight:600}
+table.demos .spec{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.tblscroll{overflow-x:auto;border-radius:12px}
+.fam{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;font-family:var(--mono)}
+.fam.pcm{background:#dbeafe;color:#1d4ed8} .fam.mp3{background:#ffedd5;color:#c2410c} .fam.lossless{background:#dcfce7;color:#15803d}
+.fam.ogg{background:#fce7f3;color:#be185d} .fam.mp4{background:#ede9fe;color:#6d28d9} .fam.webm{background:#cffafe;color:#0e7490}
+.fam.other{background:var(--chip);color:var(--muted)}
+html[data-theme="dark"] .fam.pcm{background:#1e3a5f;color:#93c5fd} html[data-theme="dark"] .fam.mp3{background:#452013;color:#fdba74}
+html[data-theme="dark"] .fam.lossless{background:#14351f;color:#86efac} html[data-theme="dark"] .fam.ogg{background:#3d1230;color:#f9a8d4}
+html[data-theme="dark"] .fam.mp4{background:#2a1d52;color:#c4b5fd} html[data-theme="dark"] .fam.webm{background:#123a45;color:#67e8f9}
+/* faq */
+details.faq{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:0;margin:10px 0;box-shadow:var(--shadow)}
+details.faq summary{cursor:pointer;padding:14px 18px;font-weight:600;font-size:14.5px;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px}
+details.faq summary::after{content:'+';color:var(--muted);font-size:18px}
+details.faq[open] summary::after{content:'–'}
+details.faq .fabody{padding:0 18px 14px;color:var(--muted);font-size:14px}
+details.faq .fabody code{background:var(--chip);padding:1px 6px;border-radius:5px;font-size:12.5px;color:var(--text)}
+/* footer */
+footer.site{border-top:1px solid var(--border);padding:26px 0 40px;color:var(--muted);font-size:13px;margin-top:30px}
+footer.site .fin{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:99}
+.toast.show{opacity:.95}
+@media(max-width:760px){
+  .hero h1{font-size:26px}
+  nav.main{display:none}
+  .grid2{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="wrap site-in">
+    <a class="logo" href="#top">
+      <svg width="26" height="26" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#4f46e5"/><g fill="#fff"><rect x="10" y="26" width="5" height="12" rx="2.5"/><rect x="19" y="18" width="5" height="28" rx="2.5"/><rect x="28" y="8" width="5" height="48" rx="2.5"/><rect x="37" y="16" width="5" height="32" rx="2.5"/><rect x="46" y="24" width="5" height="16" rx="2.5"/></g></svg>
+      Audio Inspector
+    </a>
+    <nav class="main">
+      <a href="#analyzer"><span data-i18n="navAnalyzer">Analyzer</span></a>
+      <a href="#demos"><span data-i18n="navDemos">Demo files</span></a>
+      <a href="#faq"><span data-i18n="navFaq">FAQ</span></a>
+    </nav>
+    <div class="hspace"></div>
+    <button class="iconbtn" id="langBtn" title="Switch language">中文</button>
+    <button class="iconbtn" id="themeBtn" title="Toggle theme">🌙</button>
+    <a class="iconbtn ghlink" href="https://github.com/Tliens/audio-inspector" target="_blank" rel="noopener" title="GitHub">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</header>
+
+<main id="top">
+<!-- ============ HERO ============ -->
+<div class="wrap hero">
+  <h1><span class="grad" data-i18n="heroTitle">Online audio debugging tools for developers</span></h1>
+  <p class="sub" data-i18n="heroSub">Inspect audio files without uploading them anywhere: format detection, container &amp; codec header parsing with a linked hex view, waveform / spectrum / level analysis, sample files in 10+ formats, and compression powered by ffmpeg.wasm.</p>
+  <div class="chips">
+    <span class="chip"><span class="dot ok"></span><span data-i18n="chipLocal">100% client-side — files never leave your browser</span></span>
+    <span class="chip"><b data-i18n="chipFormats1">Header parsing</b>&nbsp;<span data-i18n="chipFormats2">WAV · AIFF · MP3 · FLAC · Ogg · M4A · WebM · AAC · AMR · WMA · AU · CAF</span></span>
+    <span class="chip"><b data-i18n="chipEngine1">Compression</b>&nbsp;<span data-i18n="chipEngine2">MP3 · AAC · Ogg · Opus · FLAC · WAV · WebM</span></span>
+  </div>
+</div>
+
+<!-- ============ ANALYZER ============ -->
+<section id="analyzer" class="wrap">
+  <h2 class="sec" data-i18n="analyzerH2">Audio analyzer</h2>
+  <p class="secdesc" data-i18n="analyzerDesc">Drop one or more files — they are parsed and decoded locally, then you can switch between them with the chips below.</p>
+
+  <div class="drop" id="dropzone" role="button" tabindex="0">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <div class="big" data-i18n="dropBig">Drop audio files here</div>
+    <div class="hint" data-i18n="dropHint">or click to choose — you can also paste (Ctrl/⌘+V) copied files</div>
+    <div class="fmts">.wav .aif .aiff .mp3 .flac .ogg .opus .m4a .mp4 .webm .aac .amr .wma .au .caf …</div>
+    <input type="file" id="fileInput" multiple accept="audio/*,.wav,.aiff,.aif,.mp3,.flac,.ogg,.opus,.m4a,.mp4,.aac,.amr,.wma,.au,.caf,.webm" hidden>
+  </div>
+  <div id="fileChips"></div>
+
+  <div class="tabs" id="tabs" style="display:none">
+    <button class="tab active" data-tab="overview" id="tabbtn-overview"><span data-i18n="tabOverview">Overview</span></button>
+    <button class="tab" data-tab="wave"><span data-i18n="tabWave">Waveform &amp; spectrum</span></button>
+    <button class="tab" data-tab="hex"><span data-i18n="tabHex">File header</span></button>
+    <button class="tab" data-tab="comp"><span data-i18n="tabComp">Compress</span></button>
+  </div>
+
+  <!-- Overview -->
+  <div class="panel active" id="tab-overview">
+    <div id="ovEmpty" class="empty" data-i18n="noFile">No file loaded yet — drop a file above, or pick one from the demo section below.</div>
+    <div id="ovBody" style="display:none">
+      <div class="cards" id="ovCards"></div>
+      <div id="ovDecode"></div>
+      <div id="ovWarn"></div>
+      <div class="subblock" id="ovLevelsBox"><h3><span data-i18n="levelsH">Level statistics</span> <span class="badge" data-i18n="fromDecoded">from decoded samples</span></h3><div id="ovLevels"></div></div>
+      <div class="subblock" id="ovStructBox"><h3><span data-i18n="structH">Container structure</span></h3><div class="structchips" id="ovStruct"></div></div>
+      <div class="subblock" id="ovTagsBox"><h3><span data-i18n="tagsH">Metadata / tags</span></h3><div id="ovTags"></div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 6px">
+        <button class="btn" id="copyReport">📋 <span data-i18n="copyReport">Copy debug report</span></button>
+        <span class="hint" style="color:var(--muted);font-size:12.5px;align-self:center" data-i18n="copyReportHint">text summary, handy for bug reports</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Wave -->
+  <div class="panel" id="tab-wave">
+    <div id="wfEmpty" class="empty" data-i18n="noFile2">No file loaded yet.</div>
+    <div id="wfBody" style="display:none">
+      <div class="wavebar">
+        <button class="btn primary" id="playBtn">▶ <span data-i18n="play">Play</span></button>
+        <button class="btn" id="stopBtn">⏹</button>
+        <span class="timelab"><span id="tCur">0:00.00</span> / <span id="tDur">0:00.00</span></span>
+        <span style="flex:1"></span>
+        <button class="btn small" id="zoomOut">－</button>
+        <button class="btn small" id="zoomIn">＋</button>
+        <button class="btn small" id="zoomFit"><span data-i18n="fit">Fit</span></button>
+        <span class="badge" id="zoomLab" title="samples per pixel">—</span>
+      </div>
+      <div class="cvbox"><canvas id="wfCv" height="190"></canvas><span class="cvnote">drag = select · click = seek · wheel = zoom</span></div>
+      <div id="selInfo"></div>
+      <div class="grid2" style="margin-top:14px">
+        <div>
+          <div class="wavebar" style="margin-bottom:6px"><b style="font-size:13.5px" data-i18n="spectrumLive">Live spectrum</b></div>
+          <div class="cvbox"><canvas id="liveCv" height="120"></canvas></div>
+        </div>
+        <div>
+          <div class="wavebar" style="margin-bottom:6px"><b style="font-size:13.5px" data-i18n="spectrogram">Spectrogram</b> <button class="btn small" id="genSpec"><span data-i18n="generate">Generate</span></button></div>
+          <div class="cvbox"><canvas id="specCv" height="120"></canvas></div>
+        </div>
+      </div>
+      <div id="specNote" class="hint" style="color:var(--muted);font-size:12px;margin-top:6px"></div>
+    </div>
+  </div>
+
+  <!-- Hex -->
+  <div class="panel" id="tab-hex">
+    <div id="hexEmpty" class="empty" data-i18n="noFile3">No file loaded yet.</div>
+    <div id="hexBodyWrap" style="display:none">
+      <div class="hexwrap">
+        <div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:6px" data-i18n="treeH">Structure tree — click a node to locate it in the hex view</div>
+          <div class="treebox" id="treeBox"></div>
+        </div>
+        <div class="hexbox">
+          <div class="hexbar">
+            <span style="font-size:12.5px;color:var(--muted)" data-i18n="showFirst">Show first</span>
+            <span class="hexszs">
+              <button class="hexsz" data-b="4096">4 KB</button>
+              <button class="hexsz active" data-b="16384">16 KB</button>
+              <button class="hexsz" data-b="65536">64 KB</button>
+              <button class="hexsz" data-b="262144">256 KB</button>
+            </span>
+            <span style="flex:1"></span>
+            <input id="jumpIn" placeholder="0x1A or 1234" spellcheck="false">
+            <button class="btn small" id="jumpGo"><span data-i18n="jump">Jump</span></button>
+          </div>
+          <div id="hexScroll"><div id="hexBody"></div></div>
+          <div id="hexStatus"><span id="hexRange"></span><span id="byteInfo" data-i18n="byteHint">click a byte to inspect it</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compress -->
+  <div class="panel" id="tab-comp">
+    <div class="engcard">
+      <div class="gr">
+        <div class="et"><span data-i18n="engH">Compression engine — ffmpeg.wasm</span> <span class="badge" id="engBadge"><span data-i18n="engNotLoaded">not loaded</span></span></div>
+        <div class="ed" id="engNote" data-i18n="engNote">Downloads ~31 MB from a public CDN on first use, then runs fully in your browser. Nothing is uploaded.</div>
+        <div class="bar" id="engBarWrap" style="display:none"><div id="engBar"></div></div>
+      </div>
+      <button class="btn" id="engBtn"><span data-i18n="engLoad">Load engine</span></button>
+    </div>
+
+    <div class="subblock">
+      <h3><span data-i18n="queueH">Files to compress</span></h3>
+      <div id="queueBox"><div class="empty" style="padding:22px" data-i18n="queueEmpty">Load files in the analyzer first — every loaded file can be compressed here.</div></div>
+    </div>
+
+    <div class="subblock">
+      <h3 data-i18n="settingsH">Output settings</h3>
+      <div class="setgrid">
+        <div class="setrow"><label data-i18n="fmtLabel">Output format</label>
+          <select id="fmtSel">
+            <option value="mp3" selected>MP3 (LAME)</option>
+            <option value="aac">AAC / M4A</option>
+            <option value="ogg">Ogg Vorbis</option>
+            <option value="opus">Opus (.opus)</option>
+            <option value="webm">WebM / Opus</option>
+            <option value="flac">FLAC (lossless)</option>
+            <option value="wav">WAV PCM</option>
+          </select>
+        </div>
+        <div class="setrow" id="rowBr"><label><span data-i18n="bitrate">Bitrate</span> <b id="brVal" class="mono">192 kbps</b></label><input type="range" id="brSlider" min="32" max="320" step="8" value="192"></div>
+        <div class="setrow" id="rowVbr" style="display:none"><label><span data-i18n="vbrMode">MP3 rate mode</span></label>
+          <select id="vbrSel"><option value="cbr" selected data-i18n="cbr">CBR (constant)</option><option value="vbr" data-i18n="vbr">VBR quality</option></select>
+        </div>
+        <div class="setrow" id="rowVbrQ" style="display:none"><label><span data-i18n="vbrQ">VBR quality</span> <b id="vbrQVal" class="mono">V2 ≈ 190 kbps</b></label><input type="range" id="vbrQSlider" min="9" max="0" step="1" value="2"></div>
+        <div class="setrow" id="rowOgg" style="display:none"><label><span data-i18n="oggQ">Vorbis quality</span> <b id="oggQVal" class="mono">q5 ≈ 160 kbps</b></label><input type="range" id="oggQSlider" min="0" max="9" step="1" value="5"></div>
+        <div class="setrow" id="rowFlac" style="display:none"><label><span data-i18n="flacL">FLAC level</span> <b id="flacLVal" class="mono">5</b></label><input type="range" id="flacLSlider" min="0" max="8" step="1" value="5"></div>
+        <div class="setrow" id="rowWav" style="display:none"><label data-i18n="wavDepth">PCM bit depth</label>
+          <select id="wavSel"><option value="pcm_s16le" selected>16-bit</option><option value="pcm_s24le">24-bit</option><option value="pcm_u8">8-bit</option></select>
+        </div>
+        <div class="setrow"><label data-i18n="srLabel">Sample rate</label>
+          <select id="srSel">
+            <option value="" selected data-i18n="keepSrc">Keep source</option>
+            <option value="48000">48 000 Hz</option><option value="44100">44 100 Hz</option>
+            <option value="32000">32 000 Hz</option><option value="22050">22 050 Hz</option>
+            <option value="16000">16 000 Hz</option><option value="8000">8 000 Hz</option>
+          </select>
+        </div>
+        <div class="setrow"><label data-i18n="chLabel">Channels</label>
+          <select id="chSel"><option value="" selected data-i18n="keepSrc2">Keep source</option><option value="1" data-i18n="mono">Mono</option><option value="2" data-i18n="stereo">Stereo</option></select>
+        </div>
+        <div class="setrow"><label style="gap:8px"><input type="checkbox" id="normChk"> <span data-i18n="normalize">Normalize loudness (loudnorm ≈ −16 LUFS)</span></label></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--muted);margin:4px 0 10px" data-i18n="cmdLabel">Equivalent command line:</div>
+      <div class="cmdbox"><span id="cmdPreview"></span><button class="btn small copy" id="cmdCopy">⧉</button></div>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn primary" id="runBtn">🗜 <span data-i18n="runBtn">Compress</span></button>
+        <button class="btn" id="stopBtn2" style="display:none"><span data-i18n="stopBtn">Stop</span></button>
+        <button class="btn" id="logToggle"><span data-i18n="showLog">Show log</span></button>
+      </div>
+      <pre id="compLog"></pre>
+    </div>
+    <div id="resultsBox"></div>
+  </div>
+</section>
+
+<!-- ============ DEMOS ============ -->
+<section id="demos" class="wrap" style="border-top:1px solid var(--border)">
+  <h2 class="sec" data-i18n="demosH2">Demo files in every format</h2>
+  <p class="secdesc" data-i18n="demosDesc">Small synthetic samples you can download or analyze right here — handy for testing parsers, players and codecs. Synthesized locally (macOS TTS + ffmpeg), CC0 licensed.</p>
+  <div id="demoBox"></div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section id="faq" class="wrap" style="border-top:1px solid var(--border)">
+  <h2 class="sec" data-i18n="faqH2">FAQ</h2>
+  <p class="secdesc" data-i18n="faqDesc">Short answers for developers. If something is unclear, the source is a single HTML file — easy to read and fork.</p>
+  <details class="faq"><summary><span data-i18n="faq1q">Are my audio files uploaded to a server?</span></summary><div class="fabody"><p data-i18n="faq1a">No. Parsing, decoding, visualization and compression all run locally in your browser. The only network request is downloading the optional ffmpeg.wasm engine (~31 MB) from a public CDN when you first use the compressor. After that it is cached by the browser.</p></div></details>
+  <details class="faq"><summary><span data-i18n="faq2q">Which formats can be analyzed?</span></summary><div class="fabody"><p data-i18n="faq2a">Header parsing covers WAV/RIFF, AIFF/AIFC, MP3 (ID3v1/v2 + MPEG frames + Xing/LAME), FLAC, Ogg (Vorbis, Opus, embedded FLAC), MP4/M4A (AAC, ALAC, Opus, FLAC boxes), Matroska/WebM, ADTS AAC, AMR, WMA/ASF, Sun AU and CAF. Waveform and level statistics additionally need the browser to decode the file — Chrome/Edge/Firefox handle most formats, Safari cannot decode Ogg/Opus and those files fall back to header-only mode.</p></div></details>
+  <details class="faq"><summary><span data-i18n="faq3q">Why does detection trust magic bytes instead of the file extension?</span></summary><div class="fabody"><p data-i18n="faq3a">Extensions are optional labels — real pipelines mislabel files all the time (try the fake-wav demo, an MP3 renamed to .wav). Audio Inspector reads the first bytes of the file and detects the actual container, then reports the mismatch as a warning.</p></div></details>
+  <details class="faq"><summary><span data-i18n="faq4q">How is bitrate computed?</span></summary><div class="fabody"><p data-i18n="faq4a">When the header declares it (CBR MP3 frame headers, Xing VBR average, MP4 avgBitrate, ASF max bitrate), that value is shown. Otherwise it is computed as file size × 8 ÷ decoded duration and labeled as computed.</p></div></details>
+  <details class="faq"><summary><span data-i18n="faq5q">Why is my Opus file 48 kHz when the source was 44.1 kHz?</span></summary><div class="fabody"><p data-i18n="faq5a">Opus always decodes to 48 kHz internally; the original rate is stored as metadata in OpusHead. The overview shows the container value and the decoded value side by side.</p></div></details>
+  <details class="faq"><summary><span data-i18n="faq6q">Can I compress multiple files at once?</span></summary><div class="fabody"><p data-i18n="faq6a">Yes — drop several files, open the Compress tab, uncheck anything you want to skip, and press Compress. Files are transcoded sequentially by the ffmpeg.wasm engine; each result offers download, A/B playback and one-click re-analysis.</p></div></details>
+</section>
+</main>
+
+<footer class="site">
+  <div class="wrap fin">
+    <div>🔊 <b>Audio Inspector</b> — <span data-i18n="footTag">free online audio debugging tools. Demo files CC0. Single-file site: view source, fork it, self-host it.</span></div>
+    <div><a href="https://github.com/Tliens/audio-inspector" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/Tliens" target="_blank" rel="noopener">@Tliens</a></div>
+  </div>
+</footer>
+<div class="toast" id="toast"></div>
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "6a164def7d63477cba60148b8417ca95"}' integrity="sha512-0ahDYl866UMhKuYcW078ScMalXqtFJwwm7YluFJnk+oPpJGjhcUC0xUmS4sPLB3w8/" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<script type="module">
+/* =================================================================== utils */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtBytes = n => { if(n==null) return '—'; if(n<1024) return n+' B'; const u=['KB','MB','GB']; let i=-1; do{n/=1024;i++;}while(n>=1024&&i<2); return n.toFixed(n>=100?0:n>=10?1:2)+' '+u[i]; };
+const fmtDur = s => { if(s==null||!isFinite(s)) return '—'; const m=Math.floor(s/60), r=s-m*60; return m+':'+r.toFixed(2).padStart(5,'0'); };
+const dB = x => x<=0 ? '−∞' : (20*Math.log10(x)).toFixed(2);
+const clampN = (x,a,b) => Math.min(b,Math.max(a,x));
+const toast = msg => { const el=$('#toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.remove('show'),1800); };
+const pick = v => (v && typeof v==='object' && ('en' in v || 'zh' in v)) ? (v[LANG] ?? v.en ?? Object.values(v)[0]) : v;
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+const hexs = (n,w=8) => n.toString(16).toUpperCase().padStart(w,'0');
+
+/* =================================================================== i18n */
+const I18N = {
+en: {
+  docTitle:'Audio Inspector — Online Audio Analyzer, Header Inspector & Compressor',
+  navAnalyzer:'Analyzer', navDemos:'Demo files', navFaq:'FAQ',
+  heroTitle:'Online audio debugging tools for developers',
+  heroSub:'Inspect audio files without uploading them anywhere: format detection, container & codec header parsing with a linked hex view, waveform / spectrum / level analysis, sample files in 10+ formats, and compression powered by ffmpeg.wasm.',
+  chipLocal:'100% client-side — files never leave your browser',
+  chipFormats1:'Header parsing', chipFormats2:'WAV · AIFF · MP3 · FLAC · Ogg · M4A · WebM · AAC · AMR · WMA · AU · CAF',
+  chipEngine1:'Compression', chipEngine2:'MP3 · AAC · Ogg · Opus · FLAC · WAV · WebM',
+  analyzerH2:'Audio analyzer', analyzerDesc:'Drop one or more files — they are parsed and decoded locally, then you can switch between them with the chips below.',
+  dropBig:'Drop audio files here', dropHint:'or click to choose — you can also paste (Ctrl/⌘+V) copied files',
+  tabOverview:'Overview', tabWave:'Waveform & spectrum', tabHex:'File header', tabComp:'Compress',
+  noFile:'No file loaded yet — drop a file above, or pick one from the demo section below.',
+  noFile2:'No file loaded yet.', noFile3:'No file loaded yet.',
+  levelsH:'Level statistics', fromDecoded:'from decoded samples', structH:'Container structure', tagsH:'Metadata / tags',
+  copyReport:'Copy debug report', copyReportHint:'text summary, handy for bug reports',
+  play:'Play', fit:'Fit', spectrumLive:'Live spectrum', spectrogram:'Spectrogram', generate:'Generate',
+  treeH:'Structure tree — click a node to locate it in the hex view',
+  showFirst:'Show first', jump:'Jump', byteHint:'click a byte to inspect it',
+  engH:'Compression engine — ffmpeg.wasm', engNotLoaded:'not loaded',
+  engNote:'Downloads ~31 MB from a public CDN on first use, then runs fully in your browser. Nothing is uploaded.',
+  engLoad:'Load engine', queueH:'Files to compress',
+  queueEmpty:'Load files in the analyzer first — every loaded file can be compressed here.',
+  settingsH:'Output settings', fmtLabel:'Output format', bitrate:'Bitrate', vbrMode:'MP3 rate mode',
+  cbr:'CBR (constant)', vbr:'VBR quality', vbrQ:'VBR quality', oggQ:'Vorbis quality', flacL:'FLAC level',
+  wavDepth:'PCM bit depth', srLabel:'Sample rate', keepSrc:'Keep source', keepSrc2:'Keep source',
+  chLabel:'Channels', mono:'Mono', stereo:'Stereo', normalize:'Normalize loudness (loudnorm ≈ −16 LUFS)',
+  cmdLabel:'Equivalent command line:', runBtn:'Compress', stopBtn:'Stop', showLog:'Show log', hideLog:'Hide log',
+  demosH2:'Demo files in every format',
+  demosDesc:'Small synthetic samples you can download or analyze right here — handy for testing parsers, players and codecs. Synthesized locally (macOS TTS + ffmpeg), CC0 licensed.',
+  download:'Download', analyze:'Analyze', faqH2:'FAQ',
+  faqDesc:'Short answers for developers. If something is unclear, the source is a single HTML file — easy to read and fork.',
+  faq1q:'Are my audio files uploaded to a server?',
+  faq1a:'No. Parsing, decoding, visualization and compression all run locally in your browser. The only network request is downloading the optional ffmpeg.wasm engine (~31 MB) from a public CDN when you first use the compressor. After that it is cached by the browser.',
+  faq2q:'Which formats can be analyzed?',
+  faq2a:'Header parsing covers WAV/RIFF, AIFF/AIFC, MP3 (ID3v1/v2 + MPEG frames + Xing/LAME), FLAC, Ogg (Vorbis, Opus, embedded FLAC), MP4/M4A (AAC, ALAC, Opus, FLAC boxes), Matroska/WebM, ADTS AAC, AMR, WMA/ASF, Sun AU and CAF. Waveform and level statistics additionally need the browser to decode the file — Chrome/Edge/Firefox handle most formats, Safari cannot decode Ogg/Opus and those files fall back to header-only mode.',
+  faq3q:'Why does detection trust magic bytes instead of the file extension?',
+  faq3a:'Extensions are optional labels — real pipelines mislabel files all the time (try the fake-wav demo, an MP3 renamed to .wav). Audio Inspector reads the first bytes of the file and detects the actual container, then reports the mismatch as a warning.',
+  faq4q:'How is bitrate computed?',
+  faq4a:'When the header declares it (CBR MP3 frame headers, Xing VBR average, MP4 avgBitrate, ASF max bitrate), that value is shown. Otherwise it is computed as file size × 8 ÷ decoded duration and labeled as computed.',
+  faq5q:'Why is my Opus file 48 kHz when the source was 44.1 kHz?',
+  faq5a:'Opus always decodes to 48 kHz internally; the original rate is stored as metadata in OpusHead. The overview shows the container value and the decoded value side by side.',
+  faq6q:'Can I compress multiple files at once?',
+  faq6a:'Yes — drop several files, open the Compress tab, uncheck anything you want to skip, and press Compress. Files are transcoded sequentially by the ffmpeg.wasm engine; each result offers download, A/B playback and one-click re-analysis.',
+  footTag:'free online audio debugging tools. Demo files CC0. Single-file site: view source, fork it, self-host it.',
+  dContainer:'Container', dCodec:'Codec', dDuration:'Duration', dRate:'Sample rate', dChannels:'Channels',
+  dDepth:'Bit depth', dBitrate:'Bitrate', dSize:'File size', dExt:'Extension',
+  decOk:'Decoded OK', decFail:'Header-only mode', decWait:'Decoding…',
+  bitrateComputed:'computed', bitrateHeader:'from header',
+  lvlPeak:'Peak', lvlRms:'RMS', lvlCrest:'Crest factor', lvlDC:'DC offset', lvlClip:'Clipped samples', lvlSmp:'Total samples', lvlMin:'Min / max sample',
+  mismatchExt:'Extension mismatch: file content is {real}, but the name says {fake}. Detection used the magic bytes.',
+  noTags:'No tags found in this file.',
+  repFile:'file', repDetected:'detected', repDuration:'duration', repRate:'sample rate', repCh:'channels', repBitrate:'bitrate',
+  repDecode:'decode', repLevels:'levels', repStruct:'structure', repTags:'tags', repGenerated:'generated by',
+  qPend:'pending', qRun:'encoding', qDone:'done', qErr:'error',
+  rSaved:'smaller', rBigger:'larger', rSpeed:'speed', rOrig:'original', rNew:'compressed', rAnalyze:'Analyze', rDl:'Download',
+  engLoading:'loading', engReady:'ready', engErr:'failed',
+  runningN:'Compressing…', cTaskDone:'Compression finished', cTaskFail:'Compression failed',
+  copied:'Copied ✓', noDecode:'Your browser cannot decode this format (or the file is corrupt) — showing header information only.',
+  clipWarn:'Hard clipping detected: {n}% of samples at 0 dBFS. Audio will sound distorted.',
+  dcWarn:'DC offset {v} present — the waveform is shifted away from zero. Fix with a high-pass filter.',
+  vbrNote:'VBR file: average bitrate from Xing/Info header ({frames} frames, encoder {enc}).',
+  truncNote:'File appears truncated: header implies more data than present.',
+},
+zh: {
+  docTitle:'Audio Inspector — 在线音频格式分析、文件头解析与压缩工具',
+  navAnalyzer:'音频分析', navDemos:'示例文件', navFaq:'常见问题',
+  heroTitle:'面向开发者的在线音频调试工具',
+  heroSub:'完全在浏览器本地完成音频调试：格式识别、容器与编码头解析（联动 Hex 视图）、波形 / 频谱 / 电平分析、10+ 格式示例文件下载，以及基于 ffmpeg.wasm 的压缩转码。文件永不上传。',
+  chipLocal:'100% 本地运行 — 文件不会离开你的浏览器',
+  chipFormats1:'头解析支持', chipFormats2:'WAV · AIFF · MP3 · FLAC · Ogg · M4A · WebM · AAC · AMR · WMA · AU · CAF',
+  chipEngine1:'压缩输出', chipEngine2:'MP3 · AAC · Ogg · Opus · FLAC · WAV · WebM',
+  analyzerH2:'音频分析器', analyzerDesc:'拖入一个或多个文件 — 全部在本地解析解码，通过下方文件条切换。',
+  dropBig:'把音频文件拖到这里', dropHint:'或点击选择 — 也支持直接粘贴（Ctrl/⌘+V）复制的文件',
+  tabOverview:'概览', tabWave:'波形与频谱', tabHex:'文件头', tabComp:'压缩',
+  noFile:'还没有加载文件 — 在上方拖入文件，或从下方示例区选一个。',
+  noFile2:'还没有加载文件。', noFile3:'还没有加载文件。',
+  levelsH:'电平统计', fromDecoded:'基于解码后采样', structH:'容器结构', tagsH:'元数据 / 标签',
+  copyReport:'复制调试报告', copyReportHint:'纯文本摘要，方便贴进 bug 报告',
+  play:'播放', fit:'适配', spectrumLive:'实时频谱', spectrogram:'频谱图', generate:'生成',
+  treeH:'结构树 — 点击节点可在 Hex 视图中定位',
+  showFirst:'显示前', jump:'跳转', byteHint:'点击任意字节查看详情',
+  engH:'压缩引擎 — ffmpeg.wasm', engNotLoaded:'未加载',
+  engNote:'首次使用时从公共 CDN 下载约 31 MB，之后完全在本地运行，不会上传任何内容。',
+  engLoad:'加载引擎', queueH:'待压缩文件',
+  queueEmpty:'先在分析器中加载文件 — 所有已加载的文件都可在这里压缩。',
+  settingsH:'输出设置', fmtLabel:'输出格式', bitrate:'码率', vbrMode:'MP3 码率模式',
+  cbr:'CBR（恒定）', vbr:'VBR 音质', vbrQ:'VBR 音质', oggQ:'Vorbis 音质', flacL:'FLAC 压缩级别',
+  wavDepth:'PCM 位深', srLabel:'采样率', keepSrc:'保持源采样率', keepSrc2:'保持源声道',
+  chLabel:'声道', mono:'单声道', stereo:'立体声', normalize:'响度归一化（loudnorm ≈ −16 LUFS）',
+  cmdLabel:'等效命令行：', runBtn:'开始压缩', stopBtn:'停止', showLog:'显示日志', hideLog:'隐藏日志',
+  demosH2:'各种格式的示例文件',
+  demosDesc:'小体积合成样本，可直接下载或就地分析 — 测试解析器、播放器和编解码器的好帮手。本机合成（macOS TTS + ffmpeg），CC0 许可。',
+  download:'下载', analyze:'分析', faqH2:'常见问题',
+  faqDesc:'开发者向的简短回答。源码就是单个 HTML 文件，易于阅读和 fork。',
+  faq1q:'音频文件会被上传到服务器吗？',
+  faq1a:'不会。解析、解码、可视化和压缩全部在浏览器本地完成。唯一的网络请求是首次使用压缩功能时从公共 CDN 下载可选的 ffmpeg.wasm 引擎（约 31 MB），之后由浏览器缓存。',
+  faq2q:'支持分析哪些格式？',
+  faq2a:'头解析覆盖 WAV/RIFF、AIFF/AIFC、MP3（ID3v1/v2 + MPEG 帧 + Xing/LAME）、FLAC、Ogg（Vorbis、Opus、内嵌 FLAC）、MP4/M4A（AAC、ALAC、Opus、FLAC box）、Matroska/WebM、ADTS AAC、AMR、WMA/ASF、Sun AU 和 CAF。波形与电平统计还需要浏览器能解码该文件 — Chrome/Edge/Firefox 支持大多数格式；Safari 无法解码 Ogg/Opus，这类文件会退回"仅头信息"模式。',
+  faq3q:'为什么识别格式依据 magic bytes 而不是扩展名？',
+  faq3a:'扩展名只是可选标签 — 真实管线里文件标错后缀太常见了（试试"假 WAV"示例：一个改名为 .wav 的 MP3）。Audio Inspector 读取文件头部字节判断真实容器，并把不一致作为警告展示。',
+  faq4q:'码率是怎么计算的？',
+  faq4a:'如果头部声明了码率（CBR MP3 帧头、Xing VBR 平均码率、MP4 avgBitrate、ASF max bitrate）则直接显示；否则按 文件大小 × 8 ÷ 解码时长 计算并标注为"计算值"。',
+  faq5q:'源是 44.1 kHz，为什么 Opus 文件显示 48 kHz？',
+  faq5a:'Opus 内部恒定以 48 kHz 解码；原始采样率只作为元数据存在 OpusHead 里。概览页会同时展示容器值与解码值。',
+  faq6q:'可以批量压缩吗？',
+  faq6a:'可以 — 拖入多个文件，打开"压缩"页，取消不需要的勾选后点"开始压缩"。ffmpeg.wasm 引擎会按顺序转码；每个结果都支持下载、A/B 对比试听和一键回分析。',
+  footTag:'免费在线音频调试工具。示例文件 CC0。单文件站点：查看源码即可 fork 或自行部署。',
+  dContainer:'容器', dCodec:'编码', dDuration:'时长', dRate:'采样率', dChannels:'声道',
+  dDepth:'位深', dBitrate:'码率', dSize:'文件大小', dExt:'扩展名',
+  decOk:'解码成功', decFail:'仅头信息模式', decWait:'解码中…',
+  bitrateComputed:'计算值', bitrateHeader:'头声明',
+  lvlPeak:'峰值', lvlRms:'RMS 均值', lvlCrest:'波峰系数', lvlDC:'直流偏移', lvlClip:'削波样本', lvlSmp:'采样点数', lvlMin:'最小 / 最大采样',
+  mismatchExt:'扩展名不一致：文件内容是 {real}，文件名却是 {fake}。识别以 magic bytes 为准。',
+  noTags:'文件中没有发现标签。',
+  repFile:'文件', repDetected:'识别', repDuration:'时长', repRate:'采样率', repCh:'声道', repBitrate:'码率',
+  repDecode:'解码', repLevels:'电平', repStruct:'结构', repTags:'标签', repGenerated:'生成自',
+  qPend:'等待', qRun:'编码中', qDone:'完成', qErr:'失败',
+  rSaved:'更小', rBigger:'更大', rSpeed:'速度', rOrig:'原始', rNew:'压缩后', rAnalyze:'分析', rDl:'下载',
+  engLoading:'加载中', engReady:'就绪', engErr:'失败',
+  runningN:'压缩中…', cTaskDone:'压缩完成', cTaskFail:'压缩失败',
+  copied:'已复制 ✓', noDecode:'当前浏览器无法解码该格式（或文件已损坏）— 仅显示文件头信息。',
+  clipWarn:'检测到硬削波：{n}% 的采样点顶在 0 dBFS。听感会明显失真。',
+  dcWarn:'存在直流偏移 {v} — 波形整体偏离零点，可用高通滤波修复。',
+  vbrNote:'VBR 文件：平均码率取自 Xing/Info 头（{frames} 帧，编码器 {enc}）。',
+  truncNote:'文件疑似被截断：头部声明的数据量超过实际大小。',
+}};
+let LANG = 'en';
+(function initLang(){
+  const q = new URLSearchParams(location.search).get('lang');
+  let stored = null; try{ stored = localStorage.getItem('ai_lang'); }catch(e){}
+  LANG = (q==='zh'||q==='en') ? q : (stored==='zh'||stored==='en') ? stored : ((navigator.language||'en').toLowerCase().startsWith('zh')?'zh':'en');
+})();
+const t = k => (I18N[LANG] && I18N[LANG][k]) ?? I18N.en[k] ?? k;
+function tf(key, vars){ let s=t(key); if(vars) for(const k in vars) s=s.replace(new RegExp('\\{'+k+'\\}','g'), vars[k]); return s; }
+function applyI18n(){
+  $$('[data-i18n]').forEach(el=>{ el.textContent = t(el.dataset.i18n); });
+  document.documentElement.lang = LANG==='zh' ? 'zh-CN' : 'en';
+  document.title = t('docTitle');
+  $('#langBtn').textContent = LANG==='en' ? '中文' : 'EN';
+}
+function setLang(l){
+  LANG = l; try{ localStorage.setItem('ai_lang', l); }catch(e){}
+  const u = new URL(location.href);
+  if(l==='en') u.searchParams.delete('lang'); else u.searchParams.set('lang','zh');
+  history.replaceState(null,'',u);
+  applyI18n(); refreshDynamic();
+}
+
+/* =================================================================== theme */
+function setTheme(th){ document.documentElement.dataset.theme = th; try{localStorage.setItem('ai_theme',th);}catch(e){}
+  $('#themeBtn').textContent = th==='dark' ? '☀️' : '🌙'; }
+setTheme((()=>{ let s=null; try{s=localStorage.getItem('ai_theme');}catch(e){} if(s==='dark'||s==='light') return s;
+  return matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'; })());
+$('#themeBtn').onclick = () => setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
+$('#langBtn').onclick = () => setLang(LANG==='en'?'zh':'en');
+
+/* =================================================================== state */
+const state = {
+  files: [], active: -1,
+  ctx: null, analyser: null, src: null, playing: false, playOff: 0, playT0: 0, tickTimer: null,
+  wfView: null, sel: null,
+  hexLimit: 16384, hexHl: null,
+  comp: { engine:'idle', blobs:null, running:false },
+};
+let ACtx = null;
+function playCtx(){ if(!ACtx) ACtx = new (window.AudioContext||window.webkitAudioContext)(); if(ACtx.state==='suspended') ACtx.resume(); return ACtx; }
+
+/* =================================================================== byte helpers */
+const str4 = (u8,o) => String.fromCharCode(u8[o],u8[o+1],u8[o+2],u8[o+3]);
+const ascii = (u8,o,n) => { let s=''; for(let i=0;i<n&&o+i<u8.length;i++){ const b=u8[o+i]; s += (b>=32&&b<127)?String.fromCharCode(b):'.'; } return s; };
+function findAsciiStrings(u8, from, to){ const out=[]; let cur='', start=from;
+  for(let i=from;i<to;i++){ const b=u8[i]; if(b>=32&&b<127){ if(!cur) start=i; cur+=String.fromCharCode(b); }
+    else { if(cur.length>=4) out.push({s:cur, off:start}); cur=''; } }
+  if(cur.length>=4) out.push({s:cur, off:start}); return out; }
+function N(label, off, size, fields=[], children=null, desc=null){ return {label, off, size, fields, children: children||[], desc}; }
+function u32(dv,o,le=true){ return dv.getUint32(o,le); }
+function ext80(dv, off){ // 80-bit IEEE 754 extended float (AIFF/CAF sample rate)
+  const ex = dv.getUint16(off) & 0x7fff;
+  const hi = dv.getUint32(off+2), lo = dv.getUint32(off+6);
+  return (hi*4294967296 + lo) * Math.pow(2, ex-16383-56);
+}
+
+/* =================================================================== format detection */
+function detect(u8){
+  if(u8.length<12) return {kind:'unknown', name:'Unknown / too small', fam:'other'};
+  const m0 = str4(u8,0);
+  if(m0==='RIFF'){ const ty=str4(u8,8);
+    if(ty==='WAVE') return {kind:'wav', name:'RIFF / WAVE', fam:'pcm'};
+    if(ty==='WEBP') return {kind:'unknown', name:'RIFF / WEBP (image, not audio)', fam:'other'};
+    return {kind:'riff-other', name:'RIFF / '+ty, fam:'other'}; }
+  if(m0==='FORM'){ const ty=str4(u8,8);
+    if(ty==='AIFF'||ty==='AIFC') return {kind:'aiff', name:'AIFF / '+(ty==='AIFC'?'AIFC':'AIFF'), fam:'pcm'}; }
+  if(m0==='fLaC') return {kind:'flac', name:'FLAC', fam:'lossless'};
+  if(m0==='OggS') return {kind:'ogg', name:'Ogg', fam:'ogg'};
+  if(m0.slice(0,3)==='ID3') return {kind:'mp3', name:'MP3 (ID3v2)', fam:'mp3'};
+  if(m0==='#!AM') return {kind:'amr', name:'AMR', fam:'other'};
+  if(m0==='.snd') return {kind:'au', name:'Sun / NeXT AU', fam:'other'};
+  if(m0==='caff') return {kind:'caf', name:'Core Audio (CAF)', fam:'other'};
+  if(str4(u8,4)==='ftyp') return {kind:'mp4', name:'ISO MP4 / M4A', fam:'mp4'};
+  if(u8[0]===0x1A&&u8[1]===0x45&&u8[2]===0xDF&&u8[3]===0xA3) return {kind:'webm', name:'Matroska / WebM (EBML)', fam:'webm'};
+  if(u8[0]===0x30&&u8[1]===0x26&&u8[2]===0xB2&&u8[3]===0x75) return {kind:'asf', name:'ASF / WMA', fam:'other'};
+  if(u8[0]===0xFF&&(u8[1]&0xE0)===0xE0){
+    if((u8[1]&0xF6)===0xF0) return {kind:'adts', name:'AAC ADTS', fam:'mp4'};
+    const ver=(u8[1]>>3)&3, layer=(u8[1]>>1)&3;
+    if(ver!==1 && layer!==0) return {kind:'mp3', name:'MP3 (raw MPEG frames)', fam:'mp3'}; }
+  return {kind:'unknown', name:'Unknown container', fam:'other'};
+}
+const EXT_KIND = {wav:'wav',wave:'wav',aiff:'aiff',aif:'aiff',aifc:'aiff',mp3:'mp3',flac:'flac',ogg:'ogg',oga:'ogg',opus:'ogg',m4a:'mp4',m4b:'mp4',mp4:'mp4',m4r:'mp4',webm:'webm',mkv:'webm',aac:'adts',amr:'amr',wma:'asf',au:'au',snd:'au',caf:'caf'};
+/* =================================================================== parsers */
+function pushWarn(m, en, zh){ m.warnings.push({en, zh}); }
+
+/* ---- WAV / RIFF ---- */
+function parseWav(u8, dv, len){
+  const m = blankMeta('RIFF / WAVE');
+  const riffSize = u32(dv,4);
+  m.structure.push(N('RIFF', 0, 8+Math.min(riffSize,len-8), [
+    {k:'riff type', v:str4(u8,8)},
+    {k:'declared size', v:riffSize+' B'+(8+riffSize>len?' (EOF reached)':' (fits)')},
+  ]));
+  let p = 12, fmtFound=null, dataSize=null;
+  while(p+8<=len){
+    const id = ascii(u8,p,4);
+    const sz = u32(dv,p+4,true);
+    const body = p+8;
+    if(id==='fmt '){
+      const fmt = dv.getUint16(body,true);
+      const ch = dv.getUint16(body+2,true);
+      const rate = u32(dv,body+4,true);
+      const byteRate = u32(dv,body+8,true);
+      const blockAlign = dv.getUint16(body+12,true);
+      const bits = dv.getUint16(body+14,true);
+      fmtFound = {fmt,ch,rate,byteRate,blockAlign,bits};
+      m.sampleRate = rate; m.channels = ch; m.bitDepth = bits;
+      m.codec = fmtName(fmt, bits);
+      const fields = [
+        {k:'audio format', v:'0x'+hexs(fmt,4)+' — '+fmtName(fmt,bits)},
+        {k:'channels', v:String(ch)},
+        {k:'sample rate', v:rate.toLocaleString('en-US')+' Hz'},
+        {k:'byte rate', v:byteRate.toLocaleString('en-US')+' B/s'},
+        {k:'block align', v:blockAlign+' B'},
+        {k:'bits / sample', v:bits+' bit'},
+      ];
+      if(fmt===0xFFFE && body+40<=len){ // extensible
+        const cb = dv.getUint16(body+16,true);
+        const validBits = dv.getUint16(body+18,true);
+        const mask = u32(dv,body+20,true);
+        const sub = dv.getUint16(body+24,true);
+        fields.push({k:'cbSize', v:cb+' B'},{k:'valid bits', v:validBits+' bit'},
+          {k:'channel mask', v:'0x'+hexs(mask,8)},{k:'sub-format', v:fmtName(sub,validBits)+' (WAVE_FORMAT_EXTENSIBLE)'});
+        if(validBits) m.bitDepth = bits+' ('+validBits+' valid)';
+      }
+      m.structure.push(N('fmt ', p, sz+8, fields, null, {en:'Format chunk — codec parameters', zh:'格式块 — 编码参数'}));
+      p = body+sz;
+    } else if(id==='data'){
+      dataSize = sz;
+      m.structure.push(N('data', p, Math.min(sz+8,len-p), [{k:'data size', v:fmtBytes(sz)+' ('+sz.toLocaleString('en-US')+' B)'}], null, {en:'PCM sample data', zh:'PCM 采样数据'}));
+      if(body+sz>len) pushWarn(m,'data chunk declares '+sz+' B but file ends early — truncated file?','data 块声明 '+sz+' B，但文件提前结束 — 可能被截断。');
+      p = body+sz;
+    } else if(id==='LIST'){
+      const ltype = ascii(u8,body,4);
+      const kids=[];
+      if(ltype==='INFO'){
+        let q=body+4;
+        while(q+8<=body+sz){ const sid=ascii(u8,q,4).trim(), ssz=u32(dv,q+4,true);
+          const val = new TextDecoder('latin1').decode(u8.slice(q+8,Math.min(q+8+ssz,len))).replace(/\0+$/,'');
+          if(val) m.tags.push({k:INFO_MAP[sid]||sid, v:val});
+          kids.push(N(sid.trim(), q, ssz+8, [{k:'value', v:val.slice(0,200)}]));
+          q+=8+ssz+(ssz&1); }
+      }
+      m.structure.push(N('LIST/'+ltype, p, sz+8, [{k:'list type', v:ltype}], kids, {en:'Metadata chunks', zh:'元数据块'}));
+      p = body+sz;
+    } else if(id==='bext'){
+      m.structure.push(N('bext', p, sz+8, [
+        {k:'description', v:ascii(u8,body,256).trim()},
+        {k:'originator', v:ascii(u8,body+256,32).trim()},
+        {k:'date/time', v:ascii(u8,body+320,10).trim()+' '+ascii(u8,body+330,8).trim()},
+        {k:'time reference', v:String(u32(dv,body+338,true)+u32(dv,body+342,true)*4294967296)+' samples'},
+      ], null, {en:'Broadcast wave extension', zh:'广播级波形扩展（BWF）'}));
+      m.tags.push({k:'bext description', v:ascii(u8,body,100).trim()});
+      p = body+sz;
+    } else if(id==='fact'){
+      const sc = u32(dv,body,true);
+      m.structure.push(N('fact', p, sz+8, [{k:'sample length', v:sc.toLocaleString('en-US')+' frames'}]));
+      m.factFrames = sc; p = body+sz;
+    } else if(id==='id3 '||id==='ID3 '){
+      const sub = parseID3v2(u8, body, len-body);
+      m.structure.push(N('id3 ', p, sz+8, [], sub?[sub.node]:[]));
+      if(sub){ m.tags.push(...sub.tags); }
+      p = body+sz;
+    } else if(id==='cue '){
+      m.structure.push(N('cue ', p, sz+8, [{k:'cue points', v:String(dv.getUint32(body,true))}]));
+      p = body+sz;
+    } else {
+      m.structure.push(N(ascii(u8,p,4), p, sz+8, [{k:'size', v:fmtBytes(sz)}]));
+      p = body+sz;
+    }
+    if(sz<0||p<len&&p<=0) break;
+    p += (sz&1)*0; if(p<=8) break;
+    if(p+8>len) break;
+    if(riffSize && p>12+riffSize) break;
+  }
+  if(fmtFound && dataSize!=null && fmtFound.byteRate>0){
+    m.duration = dataSize/fmtFound.byteRate;
+    m.headerFrames = dataSize/fmtFound.blockAlign;
+  }
+  m.bitrateSrc='computed';
+  return m;
+}
+const INFO_MAP={INAM:'Title',IART:'Artist',ICRD:'Date',IGNR:'Genre',ICMT:'Comment',ISFT:'Software',ITRK:'Track',ICOP:'Copyright',IPRD:'Product',IENG:'Engineer',ISRC:'Source'};
+function fmtName(fmt,bits){
+  return ({1:'PCM (integer)',2:'Microsoft ADPCM',3:'IEEE float',6:'A-law',7:'μ-law',0x11:'IMA ADPCM',0x16:'DVI ADPCM',0x55:'MP3 in WAV',0xFFFE:'extensible'}[fmt]) || ('format 0x'+hexs(fmt,4)) ;
+}
+
+/* ---- AIFF ---- */
+function parseAIFF(u8, dv, len){
+  const m = blankMeta('AIFF / AIFC');
+  const formType = str4(u8,8);
+  m.structure.push(N('FORM', 0, 8+Math.min(u32(dv,4),len-8), [
+    {k:'form type', v:formType+(formType==='AIFC'?' (compressed)':' (PCM)')},
+  ]));
+  let p=12;
+  while(p+8<=len){
+    const id = ascii(u8,p,4), sz=u32(dv,p+4);
+    const body=p+8;
+    if(id==='COMM'){
+      const ch=dv.getUint16(body), frames=u32(dv,body+2), bits=dv.getUint16(body+6);
+      const rate=ext80(dv,body+8);
+      m.channels=ch; m.sampleRate=Math.round(rate); m.bitDepth=bits;
+      m.duration=frames/rate;
+      m.headerFrames=frames;
+      const fields=[{k:'channels',v:String(ch)},{k:'sample frames',v:frames.toLocaleString('en-US')},{k:'bits / sample',v:bits+' bit'},{k:'sample rate',v:Math.round(rate).toLocaleString('en-US')+' Hz (80-bit float: '+ascii(u8,body+8,10).split('').map(b=>b.charCodeAt(0).toString(16).padStart(2,'0')).join(' ')+')'}];
+      if(formType==='AIFC'){ const comp=ascii(u8,body+18,4); fields.push({k:'compression',v:comp+' — '+ascii(u8,body+22,Math.min(sz-22,60)).trim()}); m.codec=({NONE:'PCM (integer)','sowt':'PCM little-endian',fl32:'float 32-bit',FL32:'float 32-bit',ima4:'IMA ADPCM 4:1',ALAW:'A-law',ulaw:'μ-law'}[comp])||comp; }
+      else m.codec = 'PCM '+bits+'-bit big-endian';
+      m.structure.push(N('COMM',p,sz+8,fields,null,{en:'Common chunk — audio parameters',zh:'公共块 — 音频参数'}));
+      p=body+sz;
+    } else if(id==='SSND'){
+      const off=u32(dv,body), blk=u32(dv,body+4);
+      m.structure.push(N('SSND',p,Math.min(sz+8,len-p),[{k:'data offset',v:String(off)},{k:'block size',v:String(blk)},{k:'data size',v:fmtBytes(sz-8)}],null,{en:'Sound data',zh:'声音数据'}));
+      p=body+sz;
+    } else if(id==='ID3 '){
+      const sub=parseID3v2(u8,body,len-body);
+      m.structure.push(N('ID3 ',p,sz+8,[],sub?[sub.node]:[]));
+      if(sub) m.tags.push(...sub.tags);
+      p=body+sz;
+    } else {
+      const node=N(id,p,Math.min(sz+8,len-p),[{k:'size',v:fmtBytes(sz)}]);
+      if(id==='ANNO'||id==='NAME'||id==='AUTH'||id==='©cmt') { const val=ascii(u8,body,Math.min(sz,200)).trim(); node.fields.push({k:'text',v:val}); if(val) m.tags.push({k:({ANNO:'Annotation',NAME:'Name',AUTH:'Author','©cmt':'Comment'})[id],v:val}); }
+      m.structure.push(node);
+      p=body+sz;
+    }
+    if(sz===0) p+=8; else if(p+8>len) break;
+  }
+  m.bitrateSrc='computed';
+  return m;
+}
+
+/* ---- MP3 ---- */
+const MP3_BR = {
+  3:{1:[0,32,64,96,128,160,192,224,256,288,320,352,384,416,448],2:[0,32,48,56,64,80,96,112,128,160,192,224,256,320,384],3:[0,32,40,48,56,64,80,96,112,128,160,192,224,256,320]},
+  2:{1:[0,32,48,56,64,80,96,112,128,160,192,224,256,320,384],2:[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160],3:[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160]},
+};
+const MP3_SR = {3:[44100,48000,32000], 2:[22050,24000,16000], 0:[11025,12000,8000]};
+function mp3FrameHeader(u8, o){
+  if(u8[o]!==0xFF||(u8[o+1]&0xE0)!==0xE0) return null;
+  const ver=(u8[o+1]>>3)&3, layer=(u8[o+1]>>1)&3, prot=u8[o+1]&1;
+  if(ver===1||layer===0) return null;
+  const brIdx=(u8[o+2]>>4)&0xF, srIdx=(u8[o+2]>>2)&3, pad=(u8[o+2]>>1)&1;
+  const mode=(u8[o+3]>>6)&3;
+  if(brIdx===0||brIdx===15||srIdx===3) return null;
+  const br = (MP3_BR[ver]||MP3_BR[2])[4-layer][brIdx]*1000;
+  const sr = MP3_SR[ver][srIdx];
+  const spf = layer===1 ? (ver===3?1152:576) : (layer===2?1152:384);
+  let size;
+  if(layer===1) size = Math.floor((ver===3?144:72)*br/sr)+pad;
+  else if(layer===2) size = Math.floor(144*br/sr)+pad;
+  else size = Math.floor((12*br/sr)+pad)*4;
+  return {ver, layer, prot, brIdx, srIdx, pad, mode, br, sr, spf, size,
+    verName:({3:'MPEG-1',2:'MPEG-2',0:'MPEG-2.5'})[ver],
+    layerName:({3:'Layer I',2:'Layer II',1:'Layer III'})[layer],
+    modeName:({0:'stereo',1:'joint stereo',2:'dual channel',3:'mono'})[mode]};
+}
+function parseID3v2(u8, base, avail){
+  if(ascii(u8,base,3)!=='ID3') return null;
+  const major=u8[base+3], flags=u8[base+5];
+  const size=((u8[base+6]&0x7f)<<21)|((u8[base+7]&0x7f)<<14)|((u8[base+8]&0x7f)<<7)|(u8[base+9]&0x7f);
+  const node=N('ID3v2.'+major, base, size+10, [
+    {k:'version', v:'2.'+major+'.'+u8[base+4]},
+    {k:'flags', v:'0x'+hexs(flags,2)+(flags&0x80?' unsync':'')+(flags&0x40?' ext-header':'')+(flags&0x20?' experimental':'')+(flags&0x10?' footer':'')},
+    {k:'tag size', v:size.toLocaleString('en-US')+' B'},
+  ], null, {en:'ID3v2 metadata tag', zh:'ID3v2 元数据标签'});
+  const tags=[]; let p=base+10;
+  const end=Math.min(base+10+size, base+10+avail);
+  if(flags&0x40){ if(major===4) p+=4+(((u8[p]&0x7f)<<21)|((u8[p+1]&0x7f)<<14)|((u8[p+2]&0x7f)<<7)|(u8[p+3]&0x7f));
+    else if(major===3) p+=4+u32(new DataView(u8.buffer,u8.byteOffset,u8.byteLength),p); }
+  const NAMES={TIT2:{en:'Title',zh:'标题'},TPE1:{en:'Artist',zh:'艺术家'},TPE2:{en:'Album artist',zh:'专辑艺术家'},TALB:{en:'Album',zh:'专辑'},TDRC:{en:'Date',zh:'日期'},TYER:{en:'Year',zh:'年份'},TCON:{en:'Genre',zh:'流派'},TRCK:{en:'Track',zh:'音轨'},TPOS:{en:'Disc',zh:'碟号'},TENC:{en:'Encoded by',zh:'编码者'},TSSE:{en:'Encoder settings',zh:'编码器设置'},TCOP:{en:'Copyright',zh:'版权'},TLAN:{en:'Language',zh:'语言'},TPUB:{en:'Publisher',zh:'发行方'},TLEN:{en:'Length ms',zh:'时长 ms'},TBPM:{en:'BPM',zh:'BPM'},TCOM:{en:'Composer',zh:'作曲'},WXXX:{en:'URL',zh:'链接'},TXXX:{en:'User text',zh:'自定义文本'}};
+  const decTxt=(b)=>{ if(!b.length) return '';
+    const enc=b[0], d=b.slice(1);
+    try{ if(enc===0) return new TextDecoder('latin1').decode(d).replace(/\0+$/,'');
+      if(enc===1) return new TextDecoder(d[0]===0xFE?'utf-16be':'utf-16le').decode(d.slice(2)).replace(/\0+$/,'');
+      if(enc===2) return new TextDecoder('utf-16be').decode(d).replace(/\0+$/,'');
+      return new TextDecoder('utf-8').decode(d).replace(/\0+$/,''); }catch(e){ return ascii(d,0,60); } };
+  const nframes={n:0};
+  if(!(flags&0x80)){ // no unsync across tag
+    if(major===2){
+      while(p+6<=end){ const id=ascii(u8,p,3); if(!/^[A-Z0-9]{3}$/.test(id)) break;
+        const fsz=(u8[p+3]<<16)|(u8[p+4]<<8)|u8[p+5]; if(fsz<=0||p+6+fsz>end) break;
+        if(id==='TT2') tags.push({k:'Title',v:decTxt(u8.slice(p+6,p+6+fsz))});
+        if(id==='TP1') tags.push({k:'Artist',v:decTxt(u8.slice(p+6,p+6+fsz))});
+        if(id==='TAL') tags.push({k:'Album',v:decTxt(u8.slice(p+6,p+6+fsz))});
+        nframes.n++; p+=6+fsz; }
+    } else {
+      const dvid=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
+      while(p+10<=end){
+        const id=ascii(u8,p,4);
+        if(!/^[A-Z0-9]{4}$/.test(id)) break;
+        let fsz = major===4 ? ((u8[p+4]&0x7f)<<21)|((u8[p+5]&0x7f)<<14)|((u8[p+6]&0x7f)<<7)|(u8[p+7]&0x7f) : u32(dvid,p+4);
+        if(fsz<=0||p+10+fsz>end) break;
+        const fflags=(u8[p+8]<<8)|u8[p+9];
+        const body=u8.slice(p+10,p+10+fsz);
+        const nm=NAMES[id];
+        if(id==='APIC'||id==='PIC'){
+          try{ let q=1; let mime;
+            if(id==='PIC'){ mime='image/'+ascii(body,1,3).toLowerCase(); q=4; }
+            else { let e2=q; while(q<body.length&&body[q]!==0) q++; mime=ascii(body,e2,q-e2); q++; }
+            q++; // picture type
+            if(encIs16(body[0])) { while(q+1<body.length&&!(body[q]===0&&body[q+1]===0)) q+=2; q+=2; }
+            else { while(q<body.length&&body[q]!==0) q++; q++; }
+            const data=body.slice(q);
+            tags.push({k:'Cover art', v:(mime||'image')+', '+fmtBytes(data.length), cover:data, coverMime:mime||'image/jpeg'});
+            node.children.push(N('APIC',p,fsz+10,[{k:'mime',v:mime},{k:'size',v:fmtBytes(data.length)}]));
+          }catch(e){}
+        } else if(id==='COMM'){
+          const lang=ascii(body,1,3);
+          tags.push({k:(nm&&nm.en)||'Comment', v:decTxt(body.slice(4))+' ['+lang+']'});
+        } else if(id[0]==='T'&&nm){
+          const v=decTxt(body); if(v) tags.push({k:pick(nm), v:v.slice(0,300)});
+        } else if(id==='TXXX'||id==='WXXX'){
+          const v=decTxt(body); if(v) tags.push({k:'TXXX', v:v.slice(0,300)});
+        }
+        nframes.n++;
+        p+=10+fsz;
+      }
+    }
+  }
+  node.fields.push({k:'frames', v:String(nframes.n)});
+  return {node, tags, size};
+}
+function encIs16(b){ return b===1||b===2; }
+function parseMP3(u8, dv, len){
+  const m = blankMeta('MP3');
+  let p=0;
+  let id3 = parseID3v2(u8,0,len);
+  if(id3){ m.structure.push(id3.node); m.tags.push(...id3.tags); p=10+id3.size; }
+  // find first frame sync
+  let f0=-1, hdr=null;
+  const scanEnd=Math.min(len-4, p+65536);
+  for(let i=p;i<scanEnd;i++){ const h=mp3FrameHeader(u8,i); if(h&&mp3FrameHeader(u8,i+h.size)){ f0=i; hdr=h; break; } }
+  if(f0<0){ m.codec='MP3? (no frame sync found)'; pushWarn(m,'No valid MPEG audio frame found after the tag.','标签后未找到有效的 MPEG 音频帧。'); return m; }
+  if(f0>p) m.structure.push(N('gap', p, f0-p, [{k:'garbage', v:fmtBytes(f0-p)+' before first frame'}]));
+  // Xing / Info
+  const sideMono = hdr.mode===3;
+  const side = hdr.ver===3 ? (sideMono?17:32) : (sideMono?9:17);
+  const xOff=f0+4+side;
+  let xing=null;
+  if(str4(u8,xOff)==='Xing'||str4(u8,xOff)==='Info'){
+    const xf=(new DataView(u8.buffer,u8.byteOffset,u8.byteLength)).getUint32(xOff+4);
+    const xnode=N(str4(u8,xOff), xOff, 0, [{k:'flags', v:'0x'+hexs(xf,8)}]);
+    let q=xOff+8;
+    if(xf&1){ const frames=u32(new DataView(u8.buffer,u8.byteOffset,u8.byteLength),q,false); xnode.fields.push({k:'frames',v:frames.toLocaleString('en-US')}); xing={frames}; q+=4; }
+    if(xf&2){ const bytes=u32(new DataView(u8.buffer,u8.byteOffset,u8.byteLength),q,false); xnode.fields.push({k:'bytes',v:fmtBytes(bytes)}); q+=4; }
+    if(xf&4){ q+=100; xnode.fields.push({k:'TOC',v:'yes (100 entries)'}); }
+    if(xf&8){ xnode.fields.push({k:'quality',v:String(u32(new DataView(u8.buffer,u8.byteOffset,u8.byteLength),q,false))}); q+=4; }
+    const strs=findAsciiStrings(u8,q,Math.min(q+200,f0+hdr.size));
+    m.encoder=(strs.find(s=>/^(LAME|Lavf|Lavc|Gogo|L3enc|Fraunhofer|FHG|Ref)/.test(s.s))||{}).s;
+    if(m.encoder) xnode.fields.push({k:'encoder',v:m.encoder});
+    xnode.size=q-xOff;
+    m.structure.push(N('MPEG frame #0', f0, hdr.size, [
+      {k:'header', v:ascii(u8,f0,4).split('').map(b=>b.charCodeAt(0).toString(16).padStart(2,'0')).join(' ')},
+      {k:'version / layer', v:hdr.verName+' / '+hdr.layerName},
+      {k:'bitrate', v:(hdr.br/1000)+' kbps'+(str4(u8,xOff)==='Info'?' (CBR marker)':'')},
+      {k:'sample rate', v:hdr.sr.toLocaleString('en-US')+' Hz'},
+      {k:'channel mode', v:hdr.modeName},
+      {k:'frame size', v:hdr.size+' B'},{k:'samples / frame', v:String(hdr.spf)},
+      {k:'crc protected', v:hdr.prot? 'no':'yes'},
+    ], [xnode], {en:'First MPEG audio frame + Xing/Info header', zh:'首帧 + Xing/Info 头'}));
+  } else {
+    m.structure.push(N('MPEG frame #0', f0, hdr.size, [
+      {k:'version / layer', v:hdr.verName+' / '+hdr.layerName},
+      {k:'bitrate', v:(hdr.br/1000)+' kbps'},
+      {k:'sample rate', v:hdr.sr.toLocaleString('en-US')+' Hz'},
+      {k:'channel mode', v:hdr.modeName},
+      {k:'frame size', v:hdr.size+' B'},{k:'samples / frame', v:String(hdr.spf)},
+    ], null, {en:'First MPEG audio frame', zh:'首个 MPEG 音频帧'}));
+  }
+  m.sampleRate=hdr.sr; m.channels=hdr.mode===3?1:2;
+  m.codec='MP3 ('+hdr.verName+' '+hdr.layerName+(hdr.mode===3?', mono':'')+')';
+  // walk frames
+  let frames=0, foff=f0, h=hdr; const ftab=[]; let vbr=false; let lastOff=foff;
+  while(foff+4<=len && frames<400000){
+    if(!h){ // resync
+      let found=-1;
+      for(let i=foff;i<Math.min(foff+2048,len-4);i++){ const hh=mp3FrameHeader(u8,i); if(hh&&mp3FrameHeader(u8,i+hh.size)){found=i;h=hh;break;} }
+      if(found<0) break; foff=found;
+    }
+    if(frames<30) ftab.push({off:foff, size:h.size, br:h.br, sr:h.sr, mode:h.mode});
+    frames++; lastOff=foff;
+    if(h.br!==hdr.br) vbr=true;
+    foff+=h.size; h=mp3FrameHeader(u8,foff);
+  }
+  m.frameTable=ftab;
+  if(xing&&xing.frames){
+    m.duration=xing.frames*hdr.spf/hdr.sr;
+    m.bitrate=Math.round((len-f0)*8/m.duration);
+    m.bitrateSrc='header';
+    m.xingFrames=xing.frames;
+  } else if(!vbr&&hdr.br){
+    m.duration=(len-f0)*8/hdr.br;
+    m.bitrate=hdr.br; m.bitrateSrc='header';
+  } else {
+    m.duration=frames*hdr.spf/hdr.sr;
+    m.bitrate=Math.round((len-f0)*8/m.duration);
+    m.bitrateSrc='header';
+  }
+  m.frameCount=frames;
+  if(vbr&&!xing) pushWarn(m,'Bitrate changes across frames (VBR) but no Xing/Info header found — duration is estimated from a full frame walk.','各帧码率不一致（VBR）但未找到 Xing/Info 头 — 时长由完整帧遍历估算。');
+  if(lastOff+ (m.frameTable[0]?m.frameTable[0].size:0) < len-128){
+    // ID3v1 check
+    if(len>=128&&ascii(u8,len-128,3)==='TAG'){
+      const t1=ascii(u8,len-125,30).trim(), ar=ascii(u8,len-95,30).trim(), al=ascii(u8,len-65,30).trim(), yr=ascii(u8,len-35,4).trim();
+      if(t1) m.tags.push({k:'Title (ID3v1)',v:t1}); if(ar) m.tags.push({k:'Artist (ID3v1)',v:ar});
+      if(al) m.tags.push({k:'Album (ID3v1)',v:al}); if(yr) m.tags.push({k:'Year (ID3v1)',v:yr});
+      m.structure.push(N('ID3v1', len-128, 128, [{k:'title',v:t1},{k:'artist',v:ar},{k:'album',v:al},{k:'year',v:yr}], null, {en:'Legacy ID3v1 tag (last 128 bytes)', zh:'传统 ID3v1 标签（文件末尾 128 字节）'}));
+    }
+  }
+  if(m.encoder) m.tags.push({k:'Encoder', v:m.encoder});
+  if(xing&&vbr){ m.vbrInfo={frames:xing.frames, enc:m.encoder||'—'}; }
+  return m;
+}
+function blankMeta(container){
+  return { container, codec:'—', sampleRate:null, channels:null, bitDepth:null, bitrate:null, bitrateSrc:null,
+    duration:null, tags:[], structure:[], warnings:[], frameTable:null, vbrInfo:null };
+}
+/* ---- FLAC ---- */
+function parseFlac(u8, dv, len){
+  const m = blankMeta('FLAC');
+  m.codec='FLAC';
+  m.structure.push(N('fLaC', 0, 4, [{k:'magic', v:'fLaC'}]));
+  let p=4;
+  while(p+4<=len){
+    const last=u8[p]&0x80, type=u8[p]&0x7f;
+    const sz=(u8[p+1]<<16)|(u8[p+2]<<8)|u8[p+3];
+    const body=p+4;
+    const typeNames=['STREAMINFO','PADDING','APPLICATION','SEEKTABLE','VORBIS_COMMENT','CUESHEET','PICTURE'];
+    const node=N((typeNames[type]||('type '+type)), p, sz+4);
+    if(type===0&&sz>=34){
+      const off=body;
+      const minB=(u8[off]<<8)|u8[off+1], maxB=(u8[off+2]<<8)|u8[off+3];
+      const minF=(u8[off+4]<<16)|(u8[off+5]<<8)|u8[off+6], maxF=(u8[off+7]<<16)|(u8[off+8]<<8)|u8[off+9];
+      const rate=(u8[off+10]<<12)|(u8[off+11]<<4)|(u8[off+12]>>4);
+      const ch=((u8[off+12]>>1)&7)+1, bps=(((u8[off+12]&1)<<4)|(u8[off+13]>>4))+1;
+      const total=(u8[off+13]&15)*4294967296 + (u8[off+14]*16777216 + u8[off+15]*65536 + u8[off+16]*256 + u8[off+17]);
+      m.sampleRate=rate; m.channels=ch; m.bitDepth=bps;
+      m.duration= total? total/rate : null;
+      m.headerFrames=total;
+      node.fields.push(
+        {k:'min/max block size', v:minB+' / '+maxB+' samples'},
+        {k:'min/max frame size', v:(minF?minF+' / ':'')+maxF+' B'},
+        {k:'sample rate', v:rate.toLocaleString('en-US')+' Hz'},
+        {k:'channels', v:String(ch)},
+        {k:'bits / sample', v:bps+' bit'},
+        {k:'total samples', v:total.toLocaleString('en-US')},
+        {k:'duration', v:fmtDur(total/rate)},
+        {k:'audio MD5', v:ascii(u8,off+18,32)});
+      m.codec='FLAC '+bps+'-bit';
+    } else if(type===4){
+      let q=body;
+      const vlen=u32(dv,q,true); q+=4;
+      const vendor=new TextDecoder('utf-8').decode(u8.slice(q,q+vlen)); q+=vlen;
+      const count=u32(dv,q,true); q+=4;
+      node.fields.push({k:'vendor', v:vendor});
+      m.tags.push({k:'vendor', v:vendor});
+      for(let i=0;i<count&&q+4<=body+sz;i++){
+        const cl=u32(dv,q,true); q+=4;
+        const c=new TextDecoder('utf-8').decode(u8.slice(q,q+cl)); q+=cl;
+        const eq=c.indexOf('='); if(eq>0) m.tags.push({k:c.slice(0,eq).toUpperCase(), v:c.slice(eq+1)});
+      }
+      node.fields.push({k:'comments', v:String(count)});
+    } else if(type===6){
+      let q=body;
+      const ptype=u32(dv,q); q+=4;
+      const mlen=u32(dv,q); q+=4; const mime=ascii(u8,q,mlen); q+=mlen;
+      const dlen=u32(dv,q); q+=dlen;
+      const w=u32(dv,q),h=u32(dv,q+4); q+=24;
+      const dlen2=u32(dv,q); q+=4;
+      node.fields.push({k:'picture type',v:String(ptype)},{k:'mime',v:mime},{k:'dimensions',v:w+'×'+h},{k:'size',v:fmtBytes(dlen2)});
+      m.cover={data:u8.slice(q,q+dlen2), mime:mime||'image/jpeg'};
+    } else if(type===3){
+      node.fields.push({k:'seek points', v:String(Math.floor(sz/18))});
+    }
+    m.structure.push(node);
+    p=body+sz;
+    if(last) break;
+  }
+  m.bitrateSrc='computed';
+  return m;
+}
+/* ---- Ogg ---- */
+function parseOgg(u8, dv, len){
+  const m = blankMeta('Ogg');
+  let p=0, pages=0, firstPackets=[], gran=null, serial=null;
+  const cap = Math.min(len, 8*1048576);
+  while(p+27<=cap && str4(u8,p)==='OggS'){
+    const nseg=u8[p+26];
+    const segTable=u8.slice(p+27,p+27+nseg);
+    let bodyLen=0; for(let i=0;i<nseg;i++) bodyLen+=segTable[i];
+    if(p+27+nseg+bodyLen>len) { pushWarn(m,'Last Ogg page extends beyond EOF — truncated.','最后一个 Ogg 页超出文件末尾 — 文件可能被截断。'); break; }
+    const gl=u32(dv,p+6,true), gh=u32(dv,p+10,true);
+    if(pages===0){ serial=u32(dv,p+14,true);
+      // collect first packets
+      let q=p+27+nseg, acc=[], pkt=[];
+      for(let i=0;i<nseg;i++){
+        const s=segTable[i];
+        pkt.push(u8.slice(q,Math.min(q+s,len)));
+        q+=s;
+        if(s<255){ firstPackets.push(pkt); pkt=[]; }
+        if(firstPackets.length>=3) break;
+      }
+    }
+    const ht=u8[p+5];
+    if(ht&0x04) gran={hi:gh,lo:gl};
+    pages++;
+    p+=27+nseg+bodyLen;
+    if(pages>=200000) break;
+  }
+  m.oggPages=pages;
+  const pk = firstPackets[0];
+  let idOff = 27; // first page header + segtable + payload start = 27+nseg; approximate for hex linking: recompute
+  let idNode=null;
+  const merge = pkts => pkts.reduce((a,b)=>{ const c=new Uint8Array(a.length+b.length); c.set(a); c.set(b,a.length); return c; }, new Uint8Array(0));
+  if(pk){
+    const idb=merge(pk);
+    const sig=(o,n)=>ascii(idb,o,n);
+    let codecName='unknown', rate=null, ch=null, extra={};
+    if(idb[0]===1&&sig(1,6)==='vorbis'){
+      codecName='Ogg Vorbis';
+      const dvid=new DataView(idb.buffer,idb.byteOffset,idb.byteLength);
+      const v=dvid.getUint32(7,true);
+      ch=idb[11]; rate=dvid.getUint32(12,true);
+      const brMax=dvid.getUint32(16,true), brNom=dvid.getUint32(20,true), brMin=dvid.getUint32(24,true);
+      extra={k:'nominal bitrate', v:brNom?(brNom/1000)+' kbps (min '+brMin/1000+' / max '+brMax/1000+')':'—'};
+      m.codec='Vorbis'; m.bitrate=brNom||null; m.bitrateSrc='header';
+      idNode=N('vorbis id header',27,idb.length,[
+        {k:'vorbis version',v:String(v)},{k:'channels',v:String(ch)},{k:'sample rate',v:rate.toLocaleString('en-US')+' Hz'},extra,
+      ],null,{en:'Vorbis identification header',zh:'Vorbis 标识头'});
+    } else if(sig(0,8)==='OpusHead'){
+      codecName='Ogg Opus';
+      const dvid=new DataView(idb.buffer,idb.byteOffset,idb.byteLength);
+      ch=idb[9];
+      const preskip=dvid.getUint16(10,true);
+      const inputRate=dvid.getUint32(12,true);
+      const gain=dvid.getInt16(16,true);
+      rate=48000;
+      m.codec='Opus';
+      m.sampleRate=48000; m.channels=ch;
+      m.opusInputRate=inputRate;
+      idNode=N('OpusHead',27,idb.length,[
+        {k:'version',v:String(idb[8])},{k:'channels',v:String(ch)},{k:'pre-skip',v:preskip+' samples'},
+        {k:'input sample rate',v:inputRate.toLocaleString('en-US')+' Hz (metadata only — Opus always decodes at 48 kHz)'},
+        {k:'output gain',v:gain/256+' dB'},
+      ],null,{en:'Opus identification header',zh:'Opus 标识头'});
+    } else if(sig(0,8)==='\x7fFLAC'){
+      codecName='Ogg FLAC';
+      m.codec='FLAC (in Ogg)';
+      idNode=N('FLAC-in-Ogg header',27,Math.min(idb.length,50),[{k:'native flac follows',v:'major '+idb[9]+'.'+idb[10]}]);
+    } else if(sig(0,7)==='\x80theora'){
+      codecName='Ogg Theora (video)';
+      m.codec='Theora'; 
+      idNode=N('theora id header',27,idb.length,[{k:'note',v:'video codec'}]);
+    } else if(sig(0,7)==='Speex  '){
+      codecName='Ogg Speex'; m.codec='Speex';
+      const dvid=new DataView(idb.buffer,idb.byteOffset,idb.byteLength);
+      rate=dvid.getUint32(36,true); ch=dvid.getUint32(40,true);
+      idNode=N('speex header',27,idb.length,[{k:'sample rate',v:String(rate)},{k:'channels',v:String(ch)}]);
+    }
+    if(rate){ m.sampleRate=rate; }
+    if(ch){ m.channels=ch; }
+    if(idNode) m.structure.push(idNode);
+  }
+  // comments packet
+  const cm = firstPackets.find((pp,i)=>i>0 && (merge(pp)[0]===3&&ascii(merge(pp),1,6)==='vorbis' || ascii(merge(pp),0,8)==='OpusTags'));
+  if(cm){
+    const cb=merge(cm);
+    let q = (ascii(cb,0,8)==='OpusTags')?8:7;
+    const dvc=new DataView(cb.buffer,cb.byteOffset,cb.byteLength);
+    try{
+      const vlen=dvc.getUint32(q,true); q+=4;
+      const vendor=new TextDecoder('utf-8').decode(cb.slice(q,q+vlen)); q+=vlen;
+      m.tags.push({k:'vendor',v:vendor});
+      const count=dvc.getUint32(q,true); q+=4;
+      for(let i=0;i<count&&q+4<=cb.length;i++){
+        const cl=dvc.getUint32(q,true); q+=4;
+        const c=new TextDecoder('utf-8').decode(cb.slice(q,q+cl)); q+=cl;
+        const eq=c.indexOf('='); if(eq>0) m.tags.push({k:c.slice(0,eq).toUpperCase(), v:c.slice(eq+1)});
+      }
+      m.structure.push(N(ascii(cb,0,8)==='OpusTags'?'OpusTags':'vorbis comment', 0, 0, [{k:'vendor',v:vendor},{k:'comments',v:String(count)}], null, {en:'Comment header',zh:'注释头'}));
+    }catch(e){}
+  }
+  if(pages===0){ pushWarn(m,'No valid Ogg page found.','未找到有效的 Ogg 页。'); return m; }
+  m.structure.push(N('Ogg pages', 0, len, [
+    {k:'pages', v:String(pages)},
+    {k:'page size', v:'27 B header + segment table + payload'},
+    {k:'granule position', v:gran? (gran.hi*4294967296+gran.lo)+' (last page)':'—'},
+  ], null, {en:'Ogg page structure', zh:'Ogg 分页结构'}));
+  // duration from last granule
+  if(gran && m.sampleRate){
+    const g = gran.hi*4294967296+gran.lo;
+    if(m.codec==='Opus'&&m.opusInputRate!=null){
+      m.duration = g/48000;
+      m.bitrate = m.bitrate || Math.round(len*8/m.duration);
+      m.bitrateSrc = m.bitrateSrc||'header';
+    } else if(g>0){
+      m.duration = g/m.sampleRate;
+      m.bitrate = Math.round(len*8/m.duration);
+      m.bitrateSrc='header';
+    }
+  }
+  return m;
+}
+/* ---- MP4 / M4A ---- */
+function parseMP4(u8, dv, len){
+  const m = blankMeta('ISO MP4 / M4A');
+  const brand=ascii(u8,8,4);
+  const ftypSize=u32(dv,0,false);
+  const brandNode=N('ftyp', 0, ftypSize, [
+    {k:'major brand', v:brand},
+    {k:'minor version', v:'0x'+hexs(u32(dv,12,false))},
+    {k:'compatible', v:brandList(u8,16,Math.min(ftypSize-8,48))},
+  ], null, {en:'File type box', zh:'文件类型 box'});
+  m.structure.push(brandNode);
+  if(['M4B ','m4b '].includes(brand)) m.tags.push({k:'Brand note', v:'M4B = audiobook container'});
+  const MOOV_KIDS=['moov','trak','mdia','minf','stbl','udta','meta','ilst'];
+  let mvhd=null, codecEntries=[];
+  const walk=(start,end,depth)=>{
+    let p=start;
+    while(p+8<=end&&depth<6){
+      let size=u32(dv,p,false); let hdr=8;
+      if(size===1){ size=Number(dv.getBigUint64(p+8)); hdr=16; }
+      else if(size===0) size=end-p;
+      if(size<8) break;
+      const ty=ascii(u8,p+4,4);
+      if(ty==='ftyp'||ty==='mdat'||ty==='free'||ty==='skip'||ty==='wide'){
+        if(ty==='mdat') m.structure.push(N('mdat',p,Math.min(size,len-p),[{k:'size',v:fmtBytes(size)}],null,{en:'Media data (interleaved samples)',zh:'媒体数据（交错采样）'}));
+        p+=size; continue;
+      }
+      if(MOOV_KIDS.includes(ty)){
+        let cs=p+hdr;
+        if(ty==='meta') cs+=4;
+        if(ty==='moov'||ty==='udta'||ty==='ilst') m.structure.push(N(ty,p,Math.min(size,len-p),[{k:'children',v:'see below'}],null,{en:'Container box: '+ty, zh:'容器 box：'+ty}));
+        walk(cs,p+size,depth+1);
+      } else if(ty==='mvhd'){
+        const ver=u8[p+8];
+        let timescale,duration;
+        if(ver===1){ timescale=u32(dv,p+8+20,false); duration=Number(dv.getBigUint64(p+8+24)); }
+        else { timescale=u32(dv,p+8+12,false); duration=u32(dv,p+8+16,false); }
+        mvhd={timescale,duration};
+        if(!m.duration&&timescale) m.duration=duration/timescale;
+        m.structure.push(N('mvhd',p,Math.min(size,len-p),[
+          {k:'version',v:String(ver)},{k:'timescale',v:timescale.toLocaleString('en-US')+' Hz'},
+          {k:'duration',v:duration.toLocaleString('en-US')+' → '+fmtDur(duration/timescale)},
+        ],null,{en:'Movie header', zh:'影片头'}));
+      } else if(ty==='mdhd'){
+        const ver=u8[p+8];
+        let timescale,duration;
+        if(ver===1){ timescale=u32(dv,p+8+20,false); duration=Number(dv.getBigUint64(p+8+24)); }
+        else { timescale=u32(dv,p+8+12,false); duration=u32(dv,p+8+16,false); }
+        m.mdhd={timescale,duration};
+        if(timescale) m.duration=duration/timescale;
+        const lang=((u8[p+8+(ver?28:20)]>>2)&31)+96, lang2=((((u8[p+8+(ver?28:20)]&3)<<3)|(u8[p+8+(ver?28:20)+1]>>5))&31)+96, lang3=(u8[p+8+(ver?28:20)+1]&31)+96;
+        m.structure.push(N('mdhd',p,Math.min(size,len-p),[
+          {k:'timescale',v:timescale.toLocaleString('en-US')+' Hz'},
+          {k:'duration',v:fmtDur(duration/timescale)},
+          {k:'language',v:String.fromCharCode(lang,lang2,lang3)},
+        ],null,{en:'Media header',zh:'媒体头'}));
+      } else if(ty==='stsd'){
+        const cnt=u32(dv,p+12,false);
+        let q=p+16;
+        for(let i=0;i<cnt&&q+8<=end;i++){
+          const esz=u32(dv,q,false), fmt=ascii(u8,q+4,4);
+          const node=N(fmt,q,esz,[{k:'entries',v:String(cnt)}]);
+          if(fmt==='mp4a'){
+            const ch=dv.getUint16(q+8+8+8), bits=dv.getUint16(q+8+8+10), rate=u32(dv,q+8+8+16,false)/65536;
+            node.fields.push({k:'channels',v:String(ch)},{k:'bits',v:String(bits)},{k:'sample rate',v:Math.round(rate).toLocaleString('en-US')+' Hz'});
+            m.channels=ch; m.sampleRate=Math.round(rate);
+            // esds inside
+            let w=q+36; // children boxes follow the 28-byte AudioSampleEntry base
+            const ver=dv.getUint16(q+8+8);
+            if(ver===1) w+=16;
+            while(w+8<=q+esz){
+              const bs=u32(dv,w,false), bt=ascii(u8,w+4,4);
+              if(bt==='esds'){
+                const enode=parseEsds(u8,dv,w+8+4,Math.min(w+bs,q+esz));
+                node.children.push(enode.node);
+                if(enode.ot) node.fields.push({k:'object type',v:enode.ot});
+                if(enode.aac) node.fields.push({k:'AAC profile',v:enode.aac});
+                if(enode.rate){ m.sampleRate=m.sampleRate||enode.rate; node.fields.push({k:'config rate',v:enode.rate.toLocaleString('en-US')+' Hz'}); }
+                if(enode.ch!=null&&m.channels==null) m.channels=enode.ch;
+                if(enode.avgBr){ m.bitrate=enode.avgBr; m.bitrateSrc='header'; node.fields.push({k:'avg bitrate',v:Math.round(enode.avgBr/1000)+' kbps'}); }
+              }
+              w+=bs?bs:8;
+            }
+            m.codec=(m.codec&&m.codec!=='—'?m.codec+' + ':'')+'AAC-LC';
+          } else if(fmt==='alac'){ m.codec='ALAC (Apple Lossless)'; node.fields.push({k:'note',v:'in-band ALAC config in stsd'}); }
+          else if(fmt==='Opus'){ m.codec='Opus (in MP4)'; }
+          else if(fmt==='fLaC'){ m.codec='FLAC (in MP4)'; }
+          else if(fmt==='samr'){ m.codec='AMR-NB (3GP)'; }
+          else if(fmt==='sawb'){ m.codec='AMR-WB (3GP)'; }
+          codecEntries.push(fmt);
+          m.structure.push(node);
+          q+=esz?esz:8;
+        }
+      } else if(ty==='meta'||ty==='ilst'||ty==='udta'){
+        // handled via walk
+      } else if(brandMatch(brand)&&isIlstTag(ty)){
+        // ilst tag at any depth
+        parseIlstTag(u8,dv,p,size,ty,m);
+      } else {
+        m.structure.push(N(ty,p,Math.min(size,len-p),[{k:'size',v:fmtBytes(size)}]));
+      }
+      p+=size;
+    }
+  };
+  walk(0,len,0);
+  if(!codecEntries.length){ m.codec='MP4 (no audio track found)'; pushWarn(m,'No audio sample description (stsd) found — maybe a video file.','未找到音频采样描述（stsd）— 可能是视频文件。'); }
+  if(m.duration&&m.bitrate==null){ m.bitrate=Math.round(len*8/m.duration); m.bitrateSrc='computed'; }
+  return m;
+}
+function brandMatch(b){ return true; }
+function brandList(u8,o,n){ const out=[]; for(let i=0;i<n&&o+i+4<=u8.length;i+=4){ const b=ascii(u8,o+i,4); if(/^[\x20-\x7e]{4}$/.test(b)) out.push(b); } return out.slice(0,8).join(' '); }
+function isIlstTag(ty){ return /^(©|aART|covr|trkn|disk|gnre|tmpo|cpil|pgap|rtng|stik|cprt|desc|ldes|purd|purl|egid|xid|atID|cnID|geID|sfID|akID|apID|catg|keyw|rate|dscp|pvlc|pcst|tves|tvsn|tves|hdvd|shwm|ownr|name)$/.test(ty)||/^©/.test(ty)||/^[a-z]{2,4}ID$/.test(ty)||['name','desc','cprt','covr','trkn','tmpo','gnre','cpil','pgap','aART'].includes(ty)||/^\.[a-zA-Z]{3}$/.test(ty); }
+function parseIlstTag(u8,dv,p,size,ty,m){
+  const NAME={};
+  const pretty={'©nam':'Title','.nam':'Title','©ART':'Artist','.ART':'Artist','aART':'Album artist','©alb':'Album','.alb':'Album','©day':'Date','.day':'Date','©gen':'Genre','.gen':'Genre','©too':'Encoder','.too':'Encoder','©cmt':'Comment','.cmt':'Comment','©wrt':'Composer','trkn':'Track','disk':'Disc','covr':'Cover art','tmpo':'BPM','cpil':'Compilation','cprt':'Copyright','desc':'Description','pgap':'Gapless','gnre':'Genre (ID3)','purl':'Podcast URL','egid':'Episode GUID','stik':'Media kind'};
+  const body=p+8;
+  if(ty==='trkn'||ty==='disk'){ if(u32(dv,body,false)>=18){ const n=dv.getUint16(body+8+2), tot=dv.getUint16(body+8+4); m.tags.push({k:pretty[ty]||ty, v:n+(tot?'/'+tot:'')}); } return; }
+  // find data box
+  let q=body;
+  while(q+8<=p+size){
+    const dsz=u32(dv,q,false), dt=ascii(u8,q+4,4);
+    if(dt==='data'){
+      const typ=u8[q+8+3];
+      const payload=u8.slice(q+16,q+dsz);
+      if(typ===1||typ===0){ const v=new TextDecoder('utf-8').decode(payload).replace(/\0+$/,''); if(v) m.tags.push({k:pretty[ty]||ty, v:v.slice(0,300)}); }
+      else if(typ===13||typ===14){ m.cover={data:payload, mime:typ===13?'image/jpeg':'image/png'}; m.tags.push({k:pretty[ty]||ty, v:(typ===13?'JPEG':'PNG')+', '+fmtBytes(payload.length)}); }
+      else if(typ===21){ if(payload.length) m.tags.push({k:pretty[ty]||ty, v:String(new DataView(payload.buffer,payload.byteOffset).getInt8(0))}); }
+      else { m.tags.push({k:pretty[ty]||ty, v:ascii(payload,0,60)}); }
+      return;
+    }
+    q+=dsz?dsz:8;
+  }
+}
+function parseEsds(u8, dv, start, end){
+  const node=N('esds', start-8, end-start+8, [], null, {en:'Elementary stream descriptor', zh:'基本流描述符'});
+  const otNames={0x40:'MPEG-4 AAC',0x66:'MPEG-2 AAC main',0x67:'MPEG-2 AAC LC',0x68:'MPEG-2 AAC SSR',0x69:'MPEG-2/MP3',0x6B:'MP3',0x60:'MPEG-2 video',0x6D:'MPEG-1 video',0xE1:'QCELP',0xA2:'LE-AAC?'}
+  const srTable=[96000,88200,64000,48000,44100,32000,24000,22050,16000,12000,11025,8000,7350];
+  let p=start, res={};
+  const readLen=()=>{ let l=0,b; do{ b=u8[p++]; l=(l<<7)|(b&0x7f); }while(b&0x80&&p<end); return l; };
+  try{
+    while(p<end){
+      const tag=u8[p++]; const l=readLen();
+      if(tag===0x03){ p+=l>=4?3:l; } // ES_ID(2)+flags(1), ignore extra flags handling
+      else if(tag===0x04){
+        const ot=u8[p];
+        res.ot=otNames[ot]||('object type 0x'+hexs(ot,2));
+        const maxBr=u32(dv,p+5,false), avgBr=u32(dv,p+9,false);
+        if(avgBr) res.avgBr=avgBr;
+        node.fields.push({k:'object type',v:res.ot},{k:'max bitrate',v:Math.round(maxBr/1000)+' kbps'},{k:'avg bitrate',v:Math.round(avgBr/1000)+' kbps'});
+        p+=l;
+      } else if(tag===0x05){
+        const b0=u8[p], b1=u8[p+1];
+        let aot=b0>>3;
+        const fi=((b0&7)<<2)|(b1>>6);
+        const ch=(b1>>2)&0xF;
+        res.aac = 'AOT '+aot+' — '+(aot===1?'AAC-LC':aot===2?'AAC Main':aot===3?'AAC-SSR':aot===4?'AAC-LTP':aot===5?'SBR (HE-AAC)':aot===29?'PS (HE-AACv2)':'?');
+        res.rate=srTable[fi]||null; res.ch=ch;
+        node.fields.push({k:'dec specific',v:'AOT '+aot+', freq idx '+fi+', ch '+ch});
+        p+=l;
+      } else p+=l;
+    }
+  }catch(e){}
+  return {node, ...res};
+}
+/* ---- Matroska / WebM ---- */
+const MKV = {
+  0x1A45DFA3:'EBML', 0x4282:'DocType', 0x4286:'EBMLVersion', 0x2AD7B1:'TimecodeScale', 0x4489:'Duration',
+  0x4D80:'MuxingApp', 0x5741:'WritingApp', 0x7BA9:'Title', 0x18538067:'Segment', 0x1549A966:'Info',
+  0x1654AE6B:'Tracks', 0xAE:'TrackEntry', 0x86:'CodecID', 0x83:'TrackType', 0xE1:'Audio', 0xB5:'SamplingFrequency',
+  0x9F:'Channels', 0x55EE:'BitDepth', 0xD7:'TrackNumber', 0x536E:'Name', 0x63A2:'Tags', 0x447A:'Tag(s)', 0x67C8:'SimpleTag', 0x45A3:'TagName', 0x4487:'TagString',
+};
+function vint(u8,p,keepMarker=false){
+  if(p>=u8.length) return null;
+  const b=u8[p]; if(b===0) return null;
+  let len=1, mask=0x80;
+  while(!(b&mask)){ len++; mask>>=1; if(len>8) return null; }
+  let val = keepMarker? b : (b&(mask-1));
+  for(let i=1;i<len&&p+i<u8.length;i++) val=val*256+u8[p+i];
+  return {val, len};
+}
+function parseWebm(u8, dv, len){
+  const m = blankMeta('Matroska / WebM');
+  let p=0, doctype=null, doctypeVer=null, infos={}, tracks=[], rootNodes={};
+  const stack=[{start:0,end:len,name:'EBML root'}];
+  const node=N('EBML', 0, 0, [], null, {en:'EBML container', zh:'EBML 容器'});
+  m.structure.push(node);
+  let cur=node;
+  const fieldNodes=[];
+  function readFloat(u8,q,sz){ const dvo=new DataView(u8.buffer,u8.byteOffset,u8.byteLength); return sz===4?dvo.getFloat32(q):sz===8?dvo.getFloat64(q):null; }
+  function readUint(u8,q,sz){ let v=0; for(let i=0;i<sz;i++) v=v*256+u8[q+i]; return v; }
+  function walk(start,end,depth,parent){
+    let p=start;
+    while(p+2<end&&depth<7){
+      const idv=vint(u8,p,true); if(!idv) break;
+      const id=idv.val; p+=idv.len;
+      const szv=vint(u8,p); if(!szv) break;
+      p+=szv.len;
+      let size=szv.val;
+      const unknown = (szv.len<8) && (size === Math.pow(2,7*szv.len)-1);
+      if(unknown) size=end-p;
+      const name=MKV[id]||('0x'+id.toString(16));
+      if(name==='DocType'){ doctype=ascii(u8,p,size).trim(); }
+      else if(name==='EBMLVersion'){ doctypeVer=readUint(u8,p,size); }
+      else if(name==='Duration'){ infos.duration=readFloat(u8,p,size); }
+      else if(name==='TimecodeScale'){ infos.tcs=readUint(u8,p,size); }
+      else if(name==='MuxingApp'){ infos.mux=ascii(u8,p,size).trim(); }
+      else if(name==='WritingApp'){ infos.wapp=ascii(u8,p,size).trim(); }
+      else if(name==='Title'){ infos.title=ascii(u8,p,size).trim(); }
+      else if(name==='CodecID'){ tracks.push({codec:ascii(u8,p,size).trim()}); }
+      else if(name==='TrackType'){ if(tracks.length) tracks[tracks.length-1].type=readUint(u8,p,size); }
+      else if(name==='SamplingFrequency'){ if(tracks.length) tracks[tracks.length-1].rate=readFloat(u8,p,size); }
+      else if(name==='Channels'){ if(tracks.length) tracks[tracks.length-1].ch=readUint(u8,p,size); }
+      else if(name==='BitDepth'){ if(tracks.length) tracks[tracks.length-1].depth=readUint(u8,p,size); }
+      else if(name==='TagName'){ lastTagName=ascii(u8,p,size).trim(); }
+      else if(name==='TagString'){ if(lastTagName){ m.tags.push({k:lastTagName.toUpperCase(), v:ascii(u8,p,size).trim()}); lastTagName=null; } }
+      const CONTAINERS=['EBML','Segment','Info','Tracks','TrackEntry','Audio','Video','Tags','Tag','SimpleTag'];
+      if(CONTAINERS.includes(name)){
+        const cn=N(name,p-idv.len-szv.len,Math.min(size+idv.len+szv.len,end-(p-idv.len-szv.len)),[],null,{en:name+' element',zh:name+' 元素'});
+        parent.children.push(cn);
+        walk(p,p+size,depth+1,cn);
+      }
+      p+=size;
+    }
+  }
+  let lastTagName=null;
+  walk(0,len,0,node);
+  m.container = doctype==='webm'?'WebM':'Matroska';
+  const tr=tracks.find(x=>x.type===1)||tracks[0];
+  if(tr){
+    const CM={'A_OPUS':'Opus','A_MPEG/L3':'MP3','A_MPEG/L2':'MP2','A_MPEG/L1':'MP1','A_AAC':'AAC','A_AAC/MPEG4/LC':'AAC-LC','A_FLAC':'FLAC','A_VORBIS':'Vorbis','A_EAC3':'E-AC-3','A_AC3':'AC-3','A_PCM/INT/LIT':'PCM int LE','A_PCM/INT/BIG':'PCM int BE','A_PCM/FLOAT/IEEE':'PCM float','A_ALAC':'ALAC','A_DTS':'DTS','A_TRUEHD':'TrueHD'};
+    m.codec=CM[tr.codec]||tr.codec;
+    m.sampleRate=tr.rate?Math.round(tr.rate):null;
+    m.channels=tr.ch||null;
+    m.bitDepth=tr.depth||null;
+  }
+  if(infos.duration!=null){
+    const tcs=infos.tcs||1000000;
+    m.duration=infos.duration*tcs/1e9;
+  }
+  if(m.duration&&m.bitrate==null){ m.bitrate=Math.round(len*8/m.duration); m.bitrateSrc='computed'; }
+  const fields=[];
+  if(doctype!=null) fields.push({k:'DocType', v:doctype+(doctypeVer!=null?' v'+doctypeVer:'')});
+  if(infos.duration!=null) fields.push({k:'Duration', v:fmtDur(m.duration)+' (TimecodeScale '+(infos.tcs||1000000)+' ns)'});
+  if(infos.mux) fields.push({k:'Muxing app', v:infos.mux});
+  if(infos.wapp) fields.push({k:'Writing app', v:infos.wapp});
+  if(tr&&tr.codec) fields.push({k:'CodecID', v:tr.codec});
+  if(tr&&tr.rate) fields.push({k:'Sampling frequency', v:Math.round(tr.rate).toLocaleString('en-US')+' Hz'});
+  if(tr&&tr.ch) fields.push({k:'Channels', v:String(tr.ch)});
+  if(tr&&tr.depth) fields.push({k:'Bit depth', v:String(tr.depth)});
+  node.fields.push(...fields);
+  if(!fields.length){ pushWarn(m,'No recognizable Matroska elements found.','未找到可识别的 Matroska 元素。'); }
+  if(infos.mux||infos.title) { if(infos.title) m.tags.push({k:'Title',v:infos.title}); if(infos.mux) m.tags.push({k:'Muxing app',v:infos.mux}); }
+  return m;
+}
+/* ---- ADTS AAC ---- */
+function parseAdts(u8, dv, len){
+  const m = blankMeta('AAC ADTS');
+  const SR=[96000,88200,64000,48000,44100,32000,24000,22050,16000,12000,11025,8000,7350];
+  const PROF=['AAC Main','AAC-LC','AAC-SSR','AAC-LTP'];
+  let p=0, frames=0, f0=-1, first=null;
+  while(p+7<=len&&frames<500000){
+    if(u8[p]===0xFF&&(u8[p+1]&0xF6)===0xF0){
+      const id=(u8[p+1]>>3)&1;
+      const prof=((u8[p+2]>>6)&3);
+      const si=((u8[p+2]>>2)&0xF);
+      const ch=((u8[p+2]&1)<<2)|((u8[p+3]>>6)&3);
+      const flen=((u8[p+3]&3)<<11)|(u8[p+4]<<3)|((u8[p+5]>>5)&7);
+      if(flen<7){ break; }
+      if(!first){ first={id,prof,si,ch}; f0=p; }
+      frames++;
+      p+=flen;
+    } else p++;
+  }
+  if(!first){ pushWarn(m,'No ADTS frame found.','未找到 ADTS 帧。'); return m; }
+  const rate=SR[first.si];
+  m.sampleRate=rate; m.channels=first.ch===0?null:first.ch;
+  m.codec=PROF[first.prof]+(first.id?' (MPEG-2)':' (MPEG-4)')+' — ADTS stream';
+  m.duration=frames*1024/rate;
+  m.frameCount=frames;
+  m.bitrate=Math.round(len*8/m.duration); m.bitrateSrc='header';
+  m.structure.push(N('ADTS header', f0, 7, [
+    {k:'syncword', v:'0xFFF'},
+    {k:'MPEG version', v:first.id?'2':'4'},
+    {k:'profile', v:PROF[first.prof]+' (AOT '+(first.prof+1)+')'},
+    {k:'sample rate index', v:first.si+' → '+rate.toLocaleString('en-US')+' Hz'},
+    {k:'channel config', v:String(first.ch)},
+    {k:'frame length', v:'13-bit per frame'},
+    {k:'frames', v:frames.toLocaleString('en-US')+' × 1024 samples'},
+  ], null, {en:'ADTS frame header (repeated before every frame)', zh:'ADTS 帧头（每帧前重复）'}));
+  return m;
+}
+/* ---- AMR ---- */
+function parseAMR(u8, dv, len){
+  const m = blankMeta('AMR');
+  const wb = ascii(u8,0,9)==='#!AMR-WB\n';
+  const NB=[95,118,142,158,182,131,165,182,132], // bits? use bytes below
+        NB_B=[12,13,15,17,19,14,17,19], WB_B=[17,23,32,36,40,46,50,58];
+  const sizes = wb?WB_B:NB_B;
+  let p = wb?9:6;
+  m.codec='AMR'+(wb?'-WB (16 kHz)':'-NB (8 kHz)');
+  m.sampleRate=wb?16000:8000; m.channels=1;
+  m.structure.push(N('magic', 0, wb?9:6, [{k:'header', v:ascii(u8,0,(wb?9:6)-1)}]));
+  let frames=0;
+  while(p<len&&frames<2000000){
+    const toc=u8[p];
+    const mode=(toc>>3)&0xF;
+    if(mode>8){ break; }
+    const sz = mode===8? (wb?5:5) : sizes[mode];
+    frames++;
+    p+=1+sz;
+  }
+  m.duration=frames/50; // 20 ms speech frames
+  m.frameCount=frames;
+  m.bitrate=Math.round(len*8/m.duration); m.bitrateSrc='header';
+  m.structure[0].fields.push({k:'frame size table', v:'mode → '+(wb?'18/24/33/37/41/47/51/59':'13/14/16/18/20/15/17/19')+' B + 1 TOC'});
+  m.structure.push(N('frames', wb?9:6, len, [{k:'frames', v:frames.toLocaleString('en-US')+' × 20 ms'}, {k:'duration', v:fmtDur(frames/50)}]));
+  return m;
+}
+/* ---- ASF / WMA ---- */
+function guidAt(u8,o){ return ascii(u8,o,16); }
+function parseASF(u8, dv, len){
+  const m = blankMeta('ASF / WMA');
+  const G={hdr:'0\x26²u\x8EfÏ\x11¦Ù\x00ª\x00bÎl', fileProp:'\x8C«Ü¡©GÏ\x11\x8Eä\x00À\x0c Se', streamProp:'\x91\x07Ü··©Ï\x11\x8Eä\x00À\x0c Se', contentDesc:'3\x26²u\x8EfÏ\x11¦Ù\x00ª\x00bÎl', extContentDesc:'Ð Ê@\xe7\x0eÒ\x97ô\x00 É^\xa8P'};
+  let p=0;
+  // Header Object
+  if(guidAt(u8,0)!==G.hdr){ pushWarn(m,'ASF header GUID mismatch.','ASF 头 GUID 不匹配。'); }
+  return parseASFReal(u8,dv,len,m);
+}
+function parseASFReal(u8, dv, len, m){
+  const eq=(o,s)=>{ for(let i=0;i<16;i++) if(u8[o+i]!==s.charCodeAt(i)) return false; return true; };
+  const hdrSize=Number(dv.getBigUint64(8-8+8,true)); // header object size @8
+  const count=u32(dv,16,true);
+  const rootNode=N('ASF Header', 0, Math.min(hdrSize,len), [
+    {k:'header objects', v:String(count)},
+    {k:'header size', v:fmtBytes(hdrSize)},
+  ], null, {en:'ASF top-level header object', zh:'ASF 顶层头对象'});
+  m.structure.push(rootNode);
+  let p=30;
+  const end=Math.min(8+hdrSize,len);
+  while(p+24<=end){
+    const g=guidAt(u8,p);
+    const sz=Number(dv.getBigUint64(p+16,true));
+    if(sz<24) break;
+    const body=p+24;
+    if(g.startsWith('\x8C«Ü¡©G')){
+      const playDur=Number(dv.getBigUint64(body+40,true));
+      const sendDur=Number(dv.getBigUint64(body+48,true));
+      const preroll=u32(dv,body+56,true);
+      const maxBr=u32(dv,body+68,true);
+      m.duration=Math.max(0, playDur/1e7 - preroll/1000);
+      m.bitrate=maxBr||null; m.bitrateSrc=maxBr?'header':null;
+      m.asfPreroll=preroll;
+      rootNode.children.push(N('File Properties', p, sz, [
+        {k:'play duration', v:playDur.toLocaleString('en-US')+' × 100 ns → '+fmtDur(playDur/1e7)},
+        {k:'preroll', v:preroll+' ms'},
+        {k:'max bitrate', v:Math.round(maxBr/1000)+' kbps'},
+      ]));
+    } else if(g.startsWith('\x91\x07Ü··©')){
+      const streamType=guidAt(u8,body);
+      const isAudio=streamType.startsWith('øi\x9e@[MÏ\x11¨ý');
+      const woff=body+16+16+2+4+4+4; // skip streamType+errType+flags+reserved... wfx starts at body+54
+      const wfx=body+54;
+      const tag=dv.getUint16(wfx,true), ch=dv.getUint16(wfx+2,true), rate=u32(dv,wfx+4,true),
+            byteRate=u32(dv,wfx+8,true), align=dv.getUint16(wfx+12,true), bits=dv.getUint16(wfx+14,true);
+      const TAGS={0x0160:'WMA v2 (pre-8)',0x0161:'WMA Pro',0x0162:'WMA Lossless',0x0163:'WMA Voice',0x0055:'MP3',0x0001:'PCM',0x0011:'IMA ADPCM'};
+      if(isAudio){ m.codec=TAGS[tag]||('format 0x'+hexs(tag,4)); m.channels=ch; m.sampleRate=rate; m.bitDepth=bits||null; }
+      rootNode.children.push(N('Stream Properties', p, sz, [
+        {k:'stream type', v:isAudio?'audio':'other (0x'+hexs(dv.getUint32(body),32)+')'},
+        {k:'format tag', v:'0x'+hexs(tag,4)+' — '+(TAGS[tag]||'?')},
+        {k:'channels', v:String(ch)},{k:'sample rate', v:rate.toLocaleString('en-US')+' Hz'},
+        {k:'avg bytes/s', v:byteRate.toLocaleString('en-US')},{k:'bits / sample', v:String(bits)},
+      ]));
+    } else if(g.startsWith('3\x26²u')){
+      let q=body; const lens=[];
+      for(let i=0;i<5;i++){ lens.push(dv.getUint16(q,true)); q+=2; }
+      const names=['Title','Author','Copyright','Description','Rating'];
+      for(let i=0;i<5;i++){
+        const s=new TextDecoder('utf-16le').decode(u8.slice(q,q+lens[i])).replace(/\0+$/,'');
+        if(s) m.tags.push({k:names[i], v:s.slice(0,200)});
+        q+=lens[i];
+      }
+      rootNode.children.push(N('Content Description', p, sz, [{k:'fields', v:names.filter((n,i)=>lens[i]).join(', ')||'—'}]));
+    } else if(g.startsWith('Ð Ê@\xe7\x0eÒ\x97ô\x00 É^\xa8P')){
+      let q=body;
+      const cnt=dv.getUint16(q,true); q+=2;
+      for(let i=0;i<cnt&&q+4<=p+sz;i++){
+        const nl=dv.getUint16(q,true); q+=2;
+        const name=new TextDecoder('utf-16le').decode(u8.slice(q,q+nl)); q+=nl;
+        const vl=dv.getUint16(q,true); q+=2;
+        const valBytes=u8.slice(q,q+vl); q+=vl;
+        let val; try{ val=new TextDecoder('utf-16le').decode(valBytes).replace(/\0+$/,''); }catch(e){ val=ascii(valBytes,0,60); }
+        if(val) m.tags.push({k:name.toUpperCase(), v:val.slice(0,200)});
+      }
+      rootNode.children.push(N('Extended Content Description', p, sz, [{k:'entries', v:String(cnt)}]));
+    } else {
+      rootNode.children.push(N('object 0x'+hexs(dv.getUint32(p)), p, sz, [{k:'size', v:fmtBytes(sz)}]));
+    }
+    p+=sz;
+  }
+  // data object
+  if(p+50<=len){
+    m.structure.push(N('ASF Data', p, Math.min(Number(dv.getBigUint64(p+8,true)),len-p), [
+      {k:'packets', v:String(Number(dv.getBigUint64(p+32,true)))},
+    ], null, {en:'Data object (packetized media)', zh:'数据对象（分包媒体）'}));
+  }
+  m.bitDepth=null;
+  if(!m.duration) { m.bitrate=null; }
+  return m;
+}
+/* ---- AU ---- */
+function parseAU(u8, dv, len){
+  const m = blankMeta('Sun / NeXT AU');
+  const dataOff=u32(dv,4), dataSize=u32(dv,8), enc=u32(dv,12), rate=u32(dv,16), ch=u32(dv,20);
+  const ENC={1:'8-bit μ-law',2:'8-bit linear PCM',3:'16-bit linear PCM',4:'24-bit linear PCM',5:'32-bit linear PCM',6:'32-bit IEEE float',7:'64-bit IEEE float',27:'8-bit A-law'};
+  m.sampleRate=rate; m.channels=ch; m.codec=ENC[enc]||('encoding '+enc);
+  m.bitDepth=({1:8,2:8,3:16,4:24,5:32,6:32,7:64,27:8})[enc]||null;
+  const dsz=(dataSize===0xFFFFFFFF||dataSize===0)?len-dataOff:dataSize;
+  m.duration=dsz/(rate*ch*Math.max(1,(m.bitDepth||8)/8));
+  m.bitrate=Math.round(len*8/m.duration); m.bitrateSrc='header';
+  m.structure.push(N('.snd header', 0, dataOff, [
+    {k:'magic', v:'.snd'},
+    {k:'data offset', v:String(dataOff)},
+    {k:'data size', v:fmtBytes(dsz)},
+    {k:'encoding', v:enc+' — '+(ENC[enc]||'?')},
+    {k:'sample rate', v:rate.toLocaleString('en-US')+' Hz'},
+    {k:'channels', v:String(ch)},
+  ], null, {en:'Sun/NeXT audio header', zh:'Sun/NeXT 音频头'}));
+  return m;
+}
+/* ---- CAF ---- */
+function parseCAF(u8, dv, len){
+  const m = blankMeta('Core Audio (CAF)');
+  const ver=dv.getUint16(4), flags=u32(dv,6);
+  m.structure.push(N('caff', 0, 10, [{k:'version', v:String(ver)},{k:'flags', v:'0x'+hexs(flags)}]));
+  let p=8;
+  while(p+12<=len){
+    const ty=ascii(u8,p,4);
+    let sz=Number(dv.getBigUint64(p+4));
+    if(sz>0x7FFFFFFFFFFFFFFFn||p+12+sz>len&&ty!=='data') sz=len-p-12;
+    const body=p+12;
+    if(ty==='desc'){
+      const rate=ext80(dv,body);
+      const fmtId=ascii(u8,body+10,4);
+      const fflags=u32(dv,body+14);
+      const bpp=u32(dv,body+18), fpp=u32(dv,body+22), cpf=u32(dv,body+26), bpc=u32(dv,body+30);
+      m.sampleRate=Math.round(rate); m.channels=cpf; m.bitDepth=bpc||null;
+      const FMT={'lpcm':'PCM (linear)','aac ':'AAC','alac':'ALAC','ulaw':'μ-law','alaw':'A-law','ima4':'IMA ADPCM','flac':'FLAC','opus':'Opus','mac3':'MACE 3:1','mac6':'MACE 6:1'};
+      m.codec=(FMT[fmtId]||fmtId)+(bpc?' '+bpc+'-bit':'')+(fmtId==='lpcm'&&(fflags&1)?' float':fmtId==='lpcm'?' int':'');
+      if(fflags&2) m.codec+=' big-endian';
+      m.structure.push(N('desc', p, sz+12, [
+        {k:'sample rate', v:Math.round(rate).toLocaleString('en-US')+' Hz (80-bit float)'},
+        {k:'format id', v:fmtId+' — '+(FMT[fmtId]||'?')},
+        {k:'format flags', v:'0x'+hexs(fflags,8)},
+        {k:'bytes / packet', v:String(bpp)},{k:'frames / packet', v:String(fpp)},
+        {k:'channels / frame', v:String(cpf)},{k:'bits / channel', v:String(bpc)},
+      ], null, {en:'CAF audio description', zh:'CAF 音频描述'}));
+    } else if(ty==='data'){
+      const eof = sz>=0x7FFFFFFFFFFFFFFFn;
+      const dsz = eof? len-body : sz;
+      m.duration = m.sampleRate&&m.bitDepth? dsz/(m.sampleRate*m.channels*(m.bitDepth/8)*1.0) : null;
+      m.structure.push(N('data', p, Math.min(sz+12,len-p), [{k:'size', v:fmtBytes(dsz)}], null, {en:'Audio data', zh:'音频数据'}));
+      if(!m.bitrate&&m.duration){ m.bitrate=Math.round(len*8/m.duration); m.bitrateSrc='header'; }
+    } else if(ty==='info'){
+      let q=body; const cnt=u32(dv,q,true); q+=4;
+      for(let i=0;i<cnt&&q+4<=body+sz;i++){
+        const kl=u32(dv,q,true); q+=4; const k=ascii(u8,q,kl); q+=kl;
+        const vl=u32(dv,q,true); q+=4; const v=ascii(u8,q,vl); q+=vl;
+        m.tags.push({k:k||'info', v:v.slice(0,200)});
+      }
+      m.structure.push(N('info', p, sz+12, [{k:'entries', v:String(cnt)}]));
+    } else {
+      m.structure.push(N(ty, p, Math.min(sz+12,len-p), [{k:'size', v:fmtBytes(sz)}]));
+    }
+    p=body+sz;
+    if(ty==='data'&&(sz>=0x7FFFFFFFFFFFFFFFn)) break;
+  }
+  return m;
+}
+/* ---- unknown fallback ---- */
+function parseUnknown(u8, dv, len, det){
+  const m = blankMeta(det.name);
+  m.structure.push(N('first bytes', 0, Math.min(64,len), [
+    {k:'hex', v:ascii(u8,0,Math.min(32,len)).split('').map(b=>b.charCodeAt(0).toString(16).padStart(2,'0')).join(' ')},
+    {k:'ascii', v:ascii(u8,0,Math.min(32,len))},
+  ], null, {en:'Unrecognized container — check the hex view', zh:'无法识别的容器 — 请查看 Hex 视图'}));
+  const strs=findAsciiStrings(u8,0,Math.min(4096,len)).slice(0,12);
+  for(const s of strs) m.structure[0].fields.push({k:'string @'+s.off, v:s.s.slice(0,80)});
+  return m;
+}
+/* ---- dispatcher ---- */
+function parseAny(u8, det){
+  const len=u8.length;
+  const dv=new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const P={wav:parseWav, aiff:parseAIFF, mp3:parseMP3, flac:parseFlac, ogg:parseOgg, mp4:parseMP4, webm:parseWebm, adts:parseAdts, amr:parseAMR, asf:parseASF, au:parseAU, caf:parseCAF};
+  const fn=P[det.kind];
+  try{
+    if(fn) return fn(u8,dv,len);
+    if(det.kind==='riff-other'){ const m=blankMeta(det.name); m.structure.push(N('RIFF',0,12,[{k:'type',v:str4(u8,8)}])); return m; }
+    return parseUnknown(u8,dv,len,det);
+  }catch(err){
+    const m=blankMeta(det.name);
+    pushWarn(m,'Parser error: '+err.message+' — showing raw info only.','解析出错：'+err.message+' — 仅显示原始信息。');
+    return parseUnknown(u8,dv,len,det);
+  }
+}
+
+/* =================================================================== decode + stats */
+async function decodeEntry(e){
+  if(e.decoded!==undefined) return e.decoded;
+  if(e.file.size>200*1048576){ e.decoded=null; e.decodeErr=new Error('file too large'); return null; }
+  const rate = e.parsed&&e.parsed.sampleRate ? clampN(e.parsed.sampleRate,3000,384000) : 44100;
+  try{
+    let buf;
+    try{
+      const oc=new OfflineAudioContext(1,1,rate);
+      buf=await oc.decodeAudioData(e.ab.slice(0));
+    }catch(err){
+      buf=await playCtx().decodeAudioData(e.ab.slice(0));
+    }
+    e.decoded=buf;
+  }catch(err){ e.decoded=null; e.decodeErr=err; }
+  return e.decoded;
+}
+function computeStats(buf){
+  const chs=Math.min(buf.numberOfChannels,8);
+  let peak=0, sum=0, n=0, dc=0, clip=0;
+  const ch0=buf.getChannelData(0);
+  for(let c=0;c<chs;c++){
+    const d=buf.getChannelData(c);
+    for(let i=0;i<d.length;i++){
+      const v=d[i];
+      const a=v<0?-v:v;
+      if(a>peak) peak=a;
+      sum+=v*v; dc+=v;
+      if(a>=0.9995) clip++;
+      n++;
+    }
+  }
+  const rms=Math.sqrt(sum/n);
+  let mn=1e9, mx=-1e9;
+  for(let i=0;i<ch0.length;i++){ const v=ch0[i]; if(v<mn) mn=v; if(v>mx) mx=v; }
+  return {peak, rms, dc:dc/n, clipPct:clip/n*100, n, min:ch0.length?mn:0, max:ch0.length?mx:0};
+}
+/* =================================================================== file intake */
+function extOf(name){ const mm=name.toLowerCase().match(/\.([a-z0-9]+)$/); return mm?mm[1]:''; }
+async function addFiles(fileList){
+  const files=[...fileList].filter(f=>f.size>0);
+  if(!files.length) return;
+  $('#tabs').style.display='flex';
+  for(const f of files){
+    const e={ file:f, name:f.name, size:f.size, ext:extOf(f.name), status:'parsing', coverURL:null };
+    state.files.push(e);
+    renderChips();
+    await analyzeEntry(e, state.files.length-1);
+  }
+}
+async function analyzeEntry(e, idx){
+  try{
+    e.ab = await e.file.arrayBuffer();
+    e.u8 = new Uint8Array(e.ab);
+    e.det = detect(e.u8);
+    e.parsed = parseAny(e.u8, e.det);
+    // extension mismatch warning
+    const expectKind = EXT_KIND[e.ext];
+    if(expectKind && e.det.kind!=='unknown' && expectKind!==e.det.kind && !(expectKind==='ogg'&&e.det.kind==='ogg')){
+      const realName=e.det.name.split(' ')[0];
+      e.parsed.warnings.push({en:tf('mismatchExt',{real:e.det.name, fake:'.'+e.ext}), zh:tf('mismatchExt',{real:e.det.name, fake:'.'+e.ext})});
+      e.extMismatch=true;
+    }
+    if(e.parsed.duration==null&&e.parsed.headerFrames&&e.parsed.sampleRate) e.parsed.duration=e.parsed.headerFrames/e.parsed.sampleRate;
+    e.status='header';
+    // flatten structure for byte lookup
+    e.flat=[];
+    (function fl(nodes){ for(const n of nodes){ e.flat.push(n); if(n.children) fl(n.children); } })(e.parsed.structure);
+    e.status='decoding';
+    if(state.active===idx||state.active<0) { setActive(idx); }
+    renderChips();
+    await decodeEntry(e);
+    if(e.decoded){ e.stats=computeStats(e.decoded); e.status='decoded'; }
+    else if(e.decodeErr){ e.status='header'; e.decodeErrMsg=e.decodeErr.message; }
+    else { e.status='header'; }
+  }catch(err){ console.error(err); e.status='error'; e.statusMsg=err.message; }
+  if(state.active===idx) { renderOverview(); }
+  renderChips();
+}
+function activeEntry(){ return state.active>=0 ? state.files[state.active] : null; }
+function setActive(idx){
+  stopPlayback();
+  state.active=idx;
+  state.wfView=null; state.sel=null; state.specGen=false;
+  renderChips();
+  const e=activeEntry();
+  const has=!!e&&e.parsed;
+  $('#ovEmpty').style.display=has?'none':'';
+  $('#ovBody').style.display=has?'':'none';
+  $('#wfEmpty').style.display=has?'none':'';
+  $('#wfBody').style.display=has?'':'none';
+  $('#hexEmpty').style.display=has?'none':'';
+  $('#hexBodyWrap').style.display=has?'':'none';
+  if(has){ renderOverview(); drawWave(); renderTree(); renderHex(); renderQueue(); }
+}
+function removeFile(idx){
+  const e=state.files[idx];
+  if(!e) return;
+  if(e.coverURL) URL.revokeObjectURL(e.coverURL);
+  if(e.decodedURL) URL.revokeObjectURL(e.decodedURL);
+  state.files.splice(idx,1);
+  if(state.active===idx) setActive(state.files.length? Math.min(idx, state.files.length-1) : -1);
+  else if(state.active>idx) state.active--;
+  renderChips(); renderQueue();
+}
+function renderChips(){
+  const box=$('#fileChips');
+  box.innerHTML = state.files.map((e,i)=>`
+    <span class="fchip ${i===state.active?'active':''}" data-i="${i}">
+      <span class="dot ${e.status==='decoded'?'ok':e.status==='decoding'?'run':e.status==='error'?'err':'warn'}" title="${esc(e.status)}"></span>
+      <span class="nm">${esc(e.name)}</span>
+      <span style="color:var(--muted);font-size:11.5px">${fmtBytes(e.size)}</span>
+      <span class="x" data-x="${i}" title="remove">×</span>
+    </span>`).join('');
+  $$('#fileChips .fchip').forEach(el=>el.onclick=ev=>{
+    if(ev.target.dataset.x!==undefined){ removeFile(+ev.target.dataset.x); return; }
+    setActive(+el.dataset.i);
+  });
+}
+
+/* =================================================================== overview render */
+function bitrateDisplay(e){
+  const p=e.parsed;
+  if(e.decoded){
+    const calc=Math.round(e.file.size*8/e.decoded.duration);
+    let head=null;
+    if(p.bitrate&&p.duration&&Math.abs(p.bitrate-calc)/calc<0.05) head=p.bitrate;
+    return head ? (Math.round(head/1000)+' kbps <small>'+esc(t('bitrateHeader'))+'</small>') : (Math.round(calc/1000)+' kbps <small>'+esc(t('bitrateComputed'))+'</small>');
+  }
+  return p.bitrate ? Math.round(p.bitrate/1000)+' kbps <small>'+esc(t('bitrateHeader'))+'</small>' : '—';
+}
+function renderOverview(){
+  const e=activeEntry(); if(!e||!e.parsed) return;
+  const p=e.parsed;
+  const cards=[];
+  const card=(k,v)=>`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  cards.push(card(t('dContainer'), `<span class="fam ${e.det.fam}">${esc(p.container)}</span>`));
+  cards.push(card(t('dCodec'), esc(p.codec||'—')));
+  cards.push(card(t('dDuration'), e.decoded? fmtDur(e.decoded.duration) : fmtDur(p.duration)));
+  cards.push(card(t('dRate'), p.sampleRate? p.sampleRate.toLocaleString('en-US')+' Hz'+(p.opusInputRate? ' <small>in:'+p.opusInputRate+'</small>':'') : (e.decoded? e.decoded.sampleRate.toLocaleString('en-US')+' Hz':'—')));
+  cards.push(card(t('dChannels'), p.channels ?? (e.decoded? e.decoded.numberOfChannels:'—')));
+  cards.push(card(p.bitDepth!=null? t('dDepth') : t('dBitrate'), p.bitDepth!=null? esc(String(p.bitDepth))+' <small>bit</small>' : bitrateDisplay(e)));
+  if(p.bitDepth!=null) cards.push(card(t('dBitrate'), bitrateDisplay(e)));
+  cards.push(card(t('dSize'), fmtBytes(e.file.size)));
+  cards.push(card(t('dExt'), '.'+esc(e.ext)));
+  $('#ovCards').innerHTML=cards.join('');
+  // decode badge
+  let decHtml='';
+  if(e.decoded){
+    decHtml=`<span class="chip"><span class="dot ok"></span><b>${esc(t('decOk'))}</b>&nbsp; Web Audio · ${e.decoded.numberOfChannels}ch @ ${e.decoded.sampleRate.toLocaleString('en-US')} Hz · ${fmtDur(e.decoded.duration)}</span>`;
+  } else {
+    decHtml=`<span class="chip"><span class="dot warn"></span><b>${esc(t('decFail'))}</b>&nbsp; ${esc(t('noDecode'))} <small>(${esc(e.decodeErrMsg||'decodeAudioData failed')})</small></span>`;
+  }
+  $('#ovDecode').innerHTML=`<div class="chips">${decHtml}${p.vbrInfo?`<span class="chip">${esc(tf('vbrNote',{frames:p.vbrInfo.frames.toLocaleString('en-US'), enc:p.vbrInfo.enc}))}</span>`:''}</div>`;
+  // warnings
+  const warns=[];
+  for(const w of p.warnings){ const txt=typeof w==='string'?w:pick(w); warns.push(`<div class="note">⚠️ ${esc(txt)}</div>`); }
+  if(e.stats&&e.stats.clipPct>0.1) warns.push(`<div class="note err">${esc(tf('clipWarn',{n:e.stats.clipPct.toFixed(1)}))}</div>`);
+  if(e.stats&&Math.abs(e.stats.dc)>0.02) warns.push(`<div class="note err">${esc(tf('dcWarn',{v:e.stats.dc.toFixed(3)}))}</div>`);
+  $('#ovWarn').innerHTML=warns.join('');
+  // levels
+  if(e.stats){
+    const s=e.stats;
+    $('#ovLevelsBox').style.display='';
+    $('#ovLevels').innerHTML=`<table class="kv">
+      <tr><td>${esc(t('lvlPeak'))}</td><td>${dB(s.peak)} dBFS (${s.peak.toFixed(4)})</td></tr>
+      <tr><td>${esc(t('lvlRms'))}</td><td>${dB(s.rms)} dBFS (${s.rms.toFixed(4)})</td></tr>
+      <tr><td>${esc(t('lvlCrest'))}</td><td>${(dB(s.peak)-dB(s.rms)).toFixed(2)} dB</td></tr>
+      <tr><td>${esc(t('lvlDC'))}</td><td>${s.dc.toFixed(5)}</td></tr>
+      <tr><td>${esc(t('lvlClip'))}</td><td>${s.clipPct.toFixed(3)}%</td></tr>
+      <tr><td>${esc(t('lvlMin'))}</td><td>${s.min.toFixed(4)} / ${s.max.toFixed(4)}</td></tr>
+      <tr><td>${esc(t('lvlSmp'))}</td><td>${s.n.toLocaleString('en-US')} (${fmtDur(e.decoded.duration)})</td></tr>
+    </table>`;
+  } else $('#ovLevelsBox').style.display='none';
+  // structure chips
+  $('#ovStructBox').style.display=p.structure.length?'':'none';
+  $('#ovStruct').innerHTML=p.structure.map((n,i)=>`<span class="schip" data-i="${i}">${esc(n.label)} <span style="color:var(--muted)">${fmtBytes(n.size)}</span></span>`).join('');
+  $$('#ovStruct .schip').forEach(el=>el.onclick=()=>{ switchTab('hex'); highlightNode(+el.dataset.i); });
+  // tags
+  const tagsHtml = p.tags.length
+    ? `<table class="kv">${p.tags.map(tg=>`<tr><td>${esc(tg.k)}</td><td>${esc(tg.v)}${tg.cover?` <img src="${coverURL(e,tg)}" style="max-width:64px;max-height:64px;border-radius:6px;vertical-align:middle" alt="cover">`:''}</td></tr>`).join('')}</table>`
+    : `<span style="color:var(--muted)">${esc(t('noTags'))}</span>`;
+  $('#ovTags').innerHTML=tagsHtml;
+  $('#copyReport').onclick=()=>copyReport(e);
+}
+function coverURL(e,tg){
+  if(tg.cover&&!tg._u){ const b=new Blob([tg.cover],{type:tg.coverMime||'image/jpeg'}); tg._u=URL.createObjectURL(b); e._coverObjs=e._coverObjs||[]; e._coverObjs.push(tg._u); }
+  return tg._u||'';
+}
+function buildReport(e){
+  const p=e.parsed, L=[];
+  L.push('## Audio debug report');
+  L.push(`${t('repFile')}: ${e.name} (${fmtBytes(e.file.size)})`);
+  L.push(`${t('repDetected')}: ${p.container} — ${p.codec}`);
+  L.push(`${t('repDuration')}: ${e.decoded?fmtDur(e.decoded.duration):fmtDur(p.duration)} | ${t('repRate')}: ${p.sampleRate||'?'} Hz | ${t('repCh')}: ${p.channels??'?'} | ${t('repBitrate')}: ${p.bitrate?p.bitrate/1000+' kbps':'—'}${p.bitDepth?(' | '+p.bitDepth+'-bit'):''}`);
+  if(e.decoded) L.push(`${t('repDecode')}: OK (Web Audio)`);
+  else L.push(`${t('repDecode')}: FAILED — header-only`);
+  if(e.stats) L.push(`${t('repLevels')}: peak ${dB(e.stats.peak)} dBFS, rms ${dB(e.stats.rms)} dBFS, dc ${e.stats.dc.toFixed(4)}, clip ${e.stats.clipPct.toFixed(2)}%`);
+  L.push(`${t('repStruct')}: ${p.structure.map(n=>n.label).join(' > ')}`);
+  if(p.tags.length) L.push(`${t('repTags')}: ${p.tags.map(x=>x.k+'='+x.v).join('; ').slice(0,400)}`);
+  for(const w of p.warnings) L.push('WARN: '+(typeof w==='string'?w:pick(w)));
+  L.push(`${t('repGenerated')} Audio Inspector — https://tliens.github.io/audio-inspector/`);
+  return L.join('\n');
+}
+async function copyReport(e){
+  const txt=buildReport(e);
+  try{ await navigator.clipboard.writeText(txt); }
+  catch(err){
+    const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); }catch(e2){}
+    ta.remove();
+  }
+  toast(t('copied'));
+}
+/* =================================================================== waveform & player */
+function cvCtx(cv){ const dpr=window.devicePixelRatio||1; const w=cv.clientWidth||800, h=+cv.getAttribute('height');
+  if(cv.width!==w*dpr||cv.height!==h*dpr){ cv.width=w*dpr; cv.height=h*dpr; }
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); return {ctx, w, h}; }
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function drawWave(){
+  const cv=$('#wfCv'); const e=activeEntry();
+  const {ctx,w,h}=cvCtx(cv);
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#0f1420'; ctx.fillRect(0,0,w,h);
+  if(!e){ return; }
+  if(!e.decoded){
+    ctx.fillStyle='#7d8aa5'; ctx.font='12px '+cssVar('--mono');
+    ctx.textAlign='center';
+    ctx.fillText(e.status==='decoding'?'decoding… (Web Audio)':'no decoded audio — header-only mode', w/2, h/2);
+    if(e.decoded) return;
+    return;
+  }
+  const buf=e.decoded, total=buf.length;
+  if(!state.wfView) state.wfView=[0,total];
+  const [s0,s1]=state.wfView;
+  const spx=(s1-s0)/w;
+  const mid=h/2, amp=(h/2-8);
+  const chs=Math.min(buf.numberOfChannels,2);
+  const accent=cssVar('--accent'), accent2=cssVar('--accent2');
+  if(spx>=2){
+    const grad=ctx.createLinearGradient(0,0,0,h); grad.addColorStop(0,accent2); grad.addColorStop(1,accent);
+    ctx.strokeStyle=grad; ctx.lineWidth=1;
+    ctx.beginPath();
+    for(let x=0;x<w;x++){
+      const a=s0+Math.floor(x*spx), b=Math.min(s1, s0+Math.floor((x+1)*spx));
+      let mn=1,mx=-1;
+      for(let c=0;c<chs;c++){ const d=buf.getChannelData(c);
+        for(let i=a;i<b;i++){ const v=d[i]; if(v<mn)mn=v; if(v>mx)mx=v; } }
+      const y0=mid-mx*amp, y1=mid-mn*amp;
+      ctx.moveTo(x+0.5,y0); ctx.lineTo(x+0.5,Math.max(y1,y0+0.75));
+    }
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle=accent; ctx.lineWidth=1.5; ctx.beginPath();
+    for(let x=0;x<w;x++){
+      const i=s0+x; if(i>=s1) break;
+      const d=buf.getChannelData(0);
+      const y=mid-d[i]*amp;
+      if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  ctx.strokeStyle='rgba(125,138,165,.35)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(w,mid); ctx.stroke();
+  // time ticks
+  const dur=buf.duration;
+  ctx.fillStyle='#7d8aa5'; ctx.font='10px '+cssVar('--mono'); ctx.textAlign='left';
+  const t0=s0/buf.sampleRate, t1=s1/buf.sampleRate;
+  const targets=[0.01,0.05,0.1,0.25,0.5,1,2,5,10,15,30,60,120,300];
+  const span=t1-t0;
+  const step=targets.find(x=>span/x<=8)||600;
+  for(let tt=Math.ceil(t0/step)*step; tt<t1; tt+=step){
+    const x=(tt-t0)/span*w;
+    ctx.strokeStyle='rgba(125,138,165,.18)';
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+    ctx.fillText(fmtDur(tt), x+3, h-4);
+  }
+  // selection
+  if(state.sel){
+    const [a,b]=state.sel;
+    const xa=(a-s0)/(s1-s0)*w, xb=(b-s0)/(s1-s0)*w;
+    ctx.fillStyle='rgba(99,102,241,.25)';
+    ctx.fillRect(xa,0,xb-xa,h);
+    ctx.strokeStyle=accent2;
+    ctx.beginPath(); ctx.moveTo(xa,0); ctx.lineTo(xa,h); ctx.moveTo(xb,0); ctx.lineTo(xb,h); ctx.stroke();
+  }
+  drawPlayhead(cv,ctx,w,h,s0,s1);
+  $('#zoomLab').textContent = spx>=1? Math.round(spx).toLocaleString('en-US')+' smp/px' : (1/spx).toFixed(1)+' px/smp';
+}
+function drawPlayhead(cv,ctx,w,h,s0,s1){
+  const e=activeEntry(); if(!e||!e.decoded) return;
+  const t=curPlayTime(e);
+  const x=(t*e.decoded.sampleRate-s0)/(s1-s0)*w;
+  if(x<0||x>w) return;
+  ctx.strokeStyle=cssVar('--accent2'); ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+}
+/* ---------- player ---------- */
+function curPlayTime(e){
+  if(!e||!e.decoded) return 0;
+  if(state.playing&&state.src){ const c=playCtx(); return state.playOff + (c.currentTime-state.playT0); }
+  return state.playOff;
+}
+function ensureAnalyser(){
+  const c=playCtx();
+  if(!state.analyser){ state.analyser=c.createAnalyser(); state.analyser.fftSize=2048; state.analyser.connect(c.destination); }
+  return state.analyser;
+}
+function play(){
+  const e=activeEntry(); if(!e||!e.decoded) return;
+  stopSrcOnly();
+  const c=playCtx();
+  const src=c.createBufferSource();
+  src.buffer=e.decoded;
+  src.connect(ensureAnalyser());
+  let off=state.playOff;
+  if(state.sel && (off<state.sel[0]||off>=state.sel[1])) off=state.sel[0];
+  state.playOff=off; state.playT0=c.currentTime;
+  src.start(0,off);
+  src.onended=()=>{ if(state.src===src){ state.playing=false; state.src=null; if(curPlayTime(e)>=e.decoded.duration-0.05) state.playOff=0; updPlayUI(); drawWave(); } };
+  state.src=src; state.playing=true;
+  updPlayUI(); startTick();
+}
+function pause(){
+  if(!state.playing) return;
+  const e=activeEntry();
+  state.playOff=curPlayTime(e);
+  stopSrcOnly(); state.playing=false;
+  updPlayUI(); drawWave();
+}
+function stopSrcOnly(){ if(state.src){ try{state.src.onended=null; state.src.stop();}catch(e){} state.src=null; } }
+function stopPlayback(){ stopSrcOnly(); state.playing=false; state.playOff=0; updPlayUI(); }
+function seek(t){
+  const e=activeEntry(); if(!e||!e.decoded) return;
+  state.playOff=clampN(t,0,e.decoded.duration);
+  if(state.playing) play(); else { updPlayUI(); drawWave(); }
+}
+function updPlayUI(){
+  $('#playBtn').innerHTML = state.playing ? '⏸ <span>'+t('play')+'</span>' : '▶ <span>'+t('play')+'</span>';
+}
+function startTick(){
+  if(state.tickTimer) clearInterval(state.tickTimer);
+  state.tickTimer=setInterval(()=>{
+    const e=activeEntry();
+    if(!e){ clearInterval(state.tickTimer); return; }
+    $('#tCur').textContent=fmtDur(curPlayTime(e));
+    $('#tDur').textContent=fmtDur(e.decoded?e.decoded.duration:e.parsed.duration);
+    if(!$('#tab-wave').classList.contains('active')) return;
+    drawWave();
+    drawLiveSpectrum();
+  }, 60);
+}
+/* ---------- wave interactions ---------- */
+let wfDrag=null;
+function wfXtoSample(e, cv){
+  const e2=activeEntry(); if(!e2||!e2.decoded) return 0;
+  const r=cv.getBoundingClientRect();
+  const [s0,s1]=state.wfView||[0,e2.decoded.length];
+  return s0+clampN((e.clientX-r.left)/r.width,0,1)*(s1-s0);
+}
+function initWaveEvents(){
+  const cv=$('#wfCv');
+  cv.addEventListener('mousedown',ev=>{ if(!activeEntry()||!activeEntry().decoded) return;
+    const s=wfXtoSample(ev,cv); wfDrag={x0:ev.clientX, s0:s, moved:false}; });
+  window.addEventListener('mousemove',ev=>{
+    if(!wfDrag) return;
+    if(Math.abs(ev.clientX-wfDrag.x0)>4) wfDrag.moved=true;
+    if(wfDrag.moved){ const s2=wfXtoSample(ev,$('#wfCv')); state.sel=[Math.min(wfDrag.s0,s2),Math.max(wfDrag.s0,s2)]; drawWave(); }
+  });
+  window.addEventListener('mouseup',ev=>{
+    if(!wfDrag) return;
+    if(!wfDrag.moved){ state.sel=null; seek(wfDrag.s0/activeEntry().decoded.sampleRate); }
+    else renderSelInfo();
+    wfDrag=null; if(!state.playing) drawWave();
+  });
+  cv.addEventListener('wheel',ev=>{
+    const e=activeEntry(); if(!e||!e.decoded) return;
+    ev.preventDefault();
+    const [s0,s1]=state.wfView||[0,e.decoded.length];
+    const r=cv.getBoundingClientRect();
+    const frac=clampN((ev.clientX-r.left)/r.width,0,1);
+    const center=s0+frac*(s1-s0);
+    const factor=ev.deltaY>0?1.35:1/1.35;
+    let span=(s1-s0)*factor;
+    span=clampN(span, 32, e.decoded.length);
+    let ns0=center-frac*span;
+    ns0=clampN(ns0,0,e.decoded.length-span);
+    state.wfView=[ns0,ns0+span];
+    drawWave();
+  },{passive:false});
+  $('#playBtn').onclick=()=>state.playing?pause():play();
+  $('#stopBtn').onclick=()=>{ stopPlayback(); drawWave(); };
+  $('#zoomIn').onclick=()=>zoomBy(1/2);
+  $('#zoomOut').onclick=()=>zoomBy(2);
+  $('#zoomFit').onclick=()=>{ const e=activeEntry(); if(e&&e.decoded){ state.wfView=[0,e.decoded.length]; drawWave(); } };
+  $('#genSpec').onclick=()=>genSpectrogram();
+}
+function zoomBy(f){
+  const e=activeEntry(); if(!e||!e.decoded) return;
+  let [s0,s1]=state.wfView||[0,e.decoded.length];
+  const center=(s0+s1)/2;
+  let span=clampN((s1-s0)*f, 32, e.decoded.length);
+  let ns0=clampN(center-span/2,0,e.decoded.length-span);
+  state.wfView=[ns0,ns0+span];
+  drawWave();
+}
+function renderSelInfo(){
+  const e=activeEntry(); const box=$('#selInfo');
+  if(!e||!e.decoded||!state.sel){ box.textContent=''; return; }
+  const sr=e.decoded.sampleRate;
+  const [a,b]=state.sel;
+  let peak=0,sum=0,n=0;
+  for(let c=0;c<e.decoded.numberOfChannels;c++){ const d=e.decoded.getChannelData(c);
+    for(let i=Math.floor(a);i<b&&i<d.length;i++){ const v=d[i]; const av=v<0?-v:v; if(av>peak)peak=av; sum+=v*v; n++; } }
+  const rms=Math.sqrt(sum/Math.max(1,n));
+  box.textContent=`${t('selLabel')}: ${fmtDur(a/sr)} – ${fmtDur(b/sr)} (${((b-a)/sr).toFixed(3)} s) · peak ${dB(peak)} dBFS · rms ${dB(rms)} dBFS`;
+}
+/* ---------- live spectrum ---------- */
+function drawLiveSpectrum(){
+  const cv=$('#liveCv'); const {ctx,w,h}=cvCtx(cv);
+  ctx.fillStyle='#0f1420'; ctx.fillRect(0,0,w,h);
+  if(!state.analyser||!state.playing){ return; }
+  const n=state.analyser.frequencyBinCount;
+  const data=new Uint8Array(n);
+  state.analyser.getByteFrequencyData(data);
+  const bars=Math.min(w, 120);
+  const bw=w/bars;
+  for(let i=0;i<bars;i++){
+    const idx=Math.floor(Math.pow(i/bars,1.8)*(n-1));
+    const v=data[idx]/255;
+    const bh=v*(h-6);
+    ctx.fillStyle=`hsl(${200+70*v},80%,${45+v*20}%)`;
+    ctx.fillRect(i*bw, h-bh, Math.max(1,bw-1), bh);
+  }
+}
+/* ---------- spectrogram ---------- */
+function fft(re,im){
+  const n=re.length;
+  for(let i=1,j=0;i<n;i++){
+    let bit=n>>1;
+    for(;j&bit;bit>>=1) j^=bit;
+    j^=bit;
+    if(i<j){ [re[i],re[j]]=[re[j],re[i]]; [im[i],im[j]]=[im[j],im[i]]; }
+  }
+  for(let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len;
+    const wr=Math.cos(ang), wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){
+      let cr=1, ci=0;
+      for(let k=0;k<len/2;k++){
+        const ur=re[i+k], ui=im[i+k];
+        const vr=re[i+k+len/2]*cr-im[i+k+len/2]*ci;
+        const vi=re[i+k+len/2]*ci+im[i+k+len/2]*cr;
+        re[i+k]=ur+vr; im[i+k]=ui+vi;
+        re[i+k+len/2]=ur-vr; im[i+k+len/2]=ui-vi;
+        const ncr=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=ncr;
+      }
+    }
+  }
+}
+function magma(t){
+  t=clampN(t,0,1);
+  const r=clampN(-0.15+t*2.2,0,1), g=clampN(t*t*1.6-0.05,0,1), b=clampN(0.9-Math.abs(t-0.15)*1.9+t*0.4,0,1);
+  return [Math.round(r*255),Math.round(g*255),Math.round(b*255)];
+}
+async function genSpectrogram(){
+  const e=activeEntry();
+  if(!e||!e.decoded){ toast(t('noFile2')); return; }
+  if(e._specGen){ drawSpecFromCache(e); return; }
+  const btn=$('#genSpec'); btn.disabled=true; btn.textContent='…';
+  await sleep(30);
+  try{
+    const buf=e.decoded;
+    const N=1024, hop=Math.max(1,Math.floor(buf.length/1200));
+    const cols=Math.min(1400, Math.max(1,Math.floor((buf.length-N)/hop)));
+    const mono=new Float32Array(Math.min(buf.length, cols*hop+N));
+    const d0=buf.getChannelData(0), d1=buf.numberOfChannels>1?buf.getChannelData(1):d0;
+    for(let i=0;i<mono.length;i++) mono[i]=(d0[i]+d1[i])/2;
+    const win=new Float32Array(N);
+    for(let i=0;i<N;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/(N-1));
+    const img=new Uint8ClampedArray(cols*(N/2)*4);
+    const re=new Float32Array(N), im=new Float32Array(N);
+    for(let c=0;c<cols;c++){
+      const off=c*hop;
+      for(let i=0;i<N;i++){ re[i]=mono[off+i]*win[i]; im[i]=0; }
+      fft(re,im);
+      for(let k=0;k<N/2;k++){
+        const mag=Math.sqrt(re[k]*re[k]+im[k]*im[k])/(N/4);
+        const dbv=20*Math.log10(mag+1e-9);
+        const v=clampN((dbv+90)/90,0,1);
+        const [r,g,b]=magma(v);
+        const y=(N/2-1-k);
+        const o=(y*cols+c)*4;
+        img[o]=r; img[o+1]=g; img[o+2]=b; img[o+3]=255;
+      }
+    }
+    const cnv=document.createElement('canvas'); cnv.width=cols; cnv.height=N/2;
+    cnv.getContext('2d').putImageData(new ImageData(img,cols,N/2),0,0);
+    e._specGen=cnv;
+    drawSpecFromCache(e);
+  } finally { btn.disabled=false; btn.innerHTML=t('generate'); }
+}
+function drawSpecFromCache(e){
+  const cv=$('#specCv'); const {ctx,w,h}=cvCtx(cv);
+  ctx.fillStyle='#0f1420'; ctx.fillRect(0,0,w,h);
+  if(!e||!e._specGen){ return; }
+  ctx.imageSmoothingEnabled=true;
+  ctx.drawImage(e._specGen,0,0,w,h);
+  const sr=e.decoded.sampleRate, nyq=sr/2;
+  ctx.fillStyle='rgba(255,255,255,.75)'; ctx.font='10px '+cssVar('--mono');
+  ctx.textAlign='left';
+  for(const f of [100,1000,10000]){
+    if(f>nyq) continue;
+    const y=h-(f/nyq)*h;
+    ctx.fillText(f>=1000?(f/1000)+'k':f, 4, y-2);
+  }
+  $('#specNote').textContent=`FFT 1024 · Hann · ${nyq.toLocaleString('en-US')} Hz Nyquist · dB scale −90…0`;
+}
+/* =================================================================== header tab: tree + hex */
+function nodeDesc(n){ return n.desc?pick(n.desc):''; }
+function renderTree(){
+  const e=activeEntry(); const box=$('#treeBox');
+  if(!e||!e.parsed){ box.innerHTML=''; return; }
+  let seq=0;
+  const build=(nodes,depth)=>{
+    return nodes.map(n=>{
+      const id=seq++;
+      n._id=id;
+      const kids=n.children&&n.children.length?`<details ${depth<2?'open':''}><summary data-id="${id}"><span class="tl">${esc(n.label)}</span><span class="ts">${fmtBytes(n.size)} @${hexs(n.off)}</span></summary>
+        <div class="fields">${n.fields.map(f=>`<div><span class="fk">${esc(f.k)}</span><span class="fv">${esc(pick(f.v)!==undefined&&typeof f.v!=='object'?f.v:pick(f.v))}</span></div>`).join('')}${nodeDesc(n)?`<div><span class="fk">—</span><span class="fv" style="color:var(--muted)">${esc(nodeDesc(n))}</span></div>`:''}</div>
+        ${build(n.children,depth+1)}</details>`
+        :`<summary data-id="${id}" class="tnode"><span class="tl">${esc(n.label)}</span><span class="ts">${fmtBytes(n.size)} @${hexs(n.off)}</span></summary>
+        <div class="fields">${n.fields.map(f=>`<div><span class="fk">${esc(f.k)}</span><span class="fv">${esc(typeof f.v==='object'?pick(f.v):String(f.v))}</span></div>`).join('')}${nodeDesc(n)?`<div><span class="fk">—</span><span class="fv" style="color:var(--muted)">${esc(nodeDesc(n))}</span></div>`:''}</div>`;
+      return `<div data-wrap="${id}">${kids}</div>`;
+    }).join('');
+  };
+  box.innerHTML=build(e.parsed.structure,0);
+  $$('#treeBox summary').forEach(s=>s.onclick=ev=>{
+    ev.preventDefault();
+    const n=findNode(e,+s.dataset.id);
+    if(n){ highlightRange(n.off,Math.min(n.size,65536),n.label); }
+  });
+}
+function findNode(e,id){ let found=null; (function f(nodes){ for(const n of nodes){ if(n._id===id){found=n;return;} if(n.children) f(n.children); } })(e.parsed.structure); return found; }
+function highlightNode(i){
+  const e=activeEntry(); if(!e||!e.parsed) return;
+  const n=e.parsed.structure[i]; if(!n) return;
+  highlightRange(n.off,Math.min(n.size,65536),n.label);
+}
+function highlightRange(off,len,label){
+  state.hexHl={off,len,label:label||''};
+  renderHex();
+  const lineH=20;
+  const scroll=$('#hexScroll');
+  const row=Math.floor(off/16);
+  scroll.scrollTop=Math.max(0,row*lineH-scroll.clientHeight/3);
+  const idx=activeEntry().flat.findIndex(n=>n.off===off&&n.size===len);
+  if(idx>=0) markTreeActive(idx===-1?null:activeEntry().flat[idx]);
+}
+function markTreeActive(n){
+  $$('#treeBox summary').forEach(s=>s.classList.toggle('hl', n&&+s.dataset.id===n._id));
+}
+function renderHex(){
+  const e=activeEntry(); const body=$('#hexBody');
+  if(!e){ body.innerHTML=''; return; }
+  const u8=e.u8;
+  const lim=Math.min(state.hexLimit,u8.length);
+  const hl=state.hexHl;
+  const rows=[];
+  for(let r=0;r<lim;r+=16){
+    const end=Math.min(r+16,lim);
+    let hx='',as='';
+    let hxPre='',hxHl='',hxPost='';
+    for(let i=r;i<end;i++){
+      const b=u8[i];
+      const h2=b.toString(16).padStart(2,'0');
+      const c=(b>=32&&b<127)?String.fromCharCode(b):'·';
+      const inHl=hl&&i>=hl.off&&i<hl.off+hl.len;
+      if(inHl){ hx+=`<i>${h2}</i> `; as+=`<i>${esc(c)}</i>`; }
+      else { hx+=h2+' '; as+=esc(c); }
+    }
+    const pad=' '.repeat((16-(end-r))*3);
+    rows.push(`<div class="hrow" data-o="${r}"><span class="ho">${hexs(r)}</span><span class="hh">${hx}${pad}</span><span class="ha">${as}</span></div>`);
+  }
+  body.innerHTML=rows.join('');
+  const total=u8.length;
+  $('#hexRange').textContent=`0x0 – 0x${hexs(lim)} (${fmtBytes(lim)} of ${fmtBytes(total)})`;
+  const more=$('#hexMoreBtn');
+  if(lim<total&&lim<262144){ if(!more){ const btn=document.createElement('button'); btn.id='hexMoreBtn'; btn.className='btn small'; btn.style.margin='8px 12px'; btn.textContent='+16 KB'; btn.onclick=()=>{ state.hexLimit=Math.min(262144,state.hexLimit+16384); renderHex(); }; body.after(btn); } }
+  else if(more) more.remove();
+  if(hl) $('#byteInfo').innerHTML=`<b>${esc(hl.label||'')}</b> · 0x${hexs(hl.off)} + ${hl.len} B`;
+}
+function initHexEvents(){
+  const body=$('#hexBody');
+  body.addEventListener('click',ev=>{
+    const row=ev.target.closest('.hrow'); if(!row) return;
+    const e=activeEntry(); if(!e) return;
+    const r=+row.dataset.o;
+    const hh=row.querySelector('.hh'), ha=row.querySelector('.ha');
+    let idx=r, col=-1;
+    if(ha.contains(ev.target)){
+      const rect=ha.getBoundingClientRect();
+      col=Math.floor((ev.clientX-rect.left)/charW());
+      idx=r+col;
+    } else {
+      const rect=hh.getBoundingClientRect();
+      const off=Math.floor((ev.clientX-rect.left)/charW());
+      idx=r+Math.floor(off/3);
+    }
+    if(idx<0||idx>=e.u8.length) return;
+    const b=e.u8[idx];
+    const owner=nearestNode(e,idx);
+    $('#byteInfo').innerHTML=`0x${hexs(idx)} · hex <b>0x${hexs(b,2)}</b> · dec <b>${b}</b> · bin <b>${b.toString(2).padStart(8,'0')}</b> · '${b>=32&&b<127?esc(String.fromCharCode(b)):'·'}'${owner?` · in <b>${esc(owner.label)}</b>`:''}`;
+  });
+  $$('.hexsz').forEach(btn=>btn.onclick=()=>{
+    $$('.hexsz').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    state.hexLimit=+btn.dataset.b;
+    renderHex();
+  });
+  $('#jumpGo').onclick=()=>{
+    const e=activeEntry(); if(!e) return;
+    const v=$('#jumpIn').value.trim();
+    const n=v.startsWith('0x')||v.startsWith('0X')?parseInt(v,16):parseInt(v,10);
+    if(isNaN(n)) { toast('invalid offset'); return; }
+    highlightRange(clampN(n,0,e.u8.length-1),Math.min(32,e.u8.length-n),'jump');
+  };
+  $('#jumpIn').addEventListener('keydown',ev=>{ if(ev.key==='Enter') $('#jumpGo').click(); });
+}
+let _charW=null;
+function charW(){
+  if(_charW) return _charW;
+  const c=document.createElement('canvas').getContext('2d');
+  c.font='12.5px '+cssVar('--mono');
+  _charW=c.measureText('0').width;
+  return _charW;
+}
+function nearestNode(e,idx){
+  let best=null;
+  for(const n of e.flat){
+    if(idx>=n.off&&idx<n.off+n.size){
+      if(!best||n.size<best.size) best=n;
+    }
+  }
+  return best;
+}
+/* =================================================================== compressor */
+const FF_CDN = [
+  'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd',
+  'https://fastly.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd',
+  'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd',
+];
+const CORE_CDN = [
+  'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd',
+  'https://fastly.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd',
+  'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd',
+];
+const CORE_SIZE = 0.11*1048576+30.74*1048576+3200;
+function loadScript(url){
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src=url; s.onload=res; s.onerror=()=>rej(new Error('script load failed: '+url));
+    document.head.appendChild(s);
+  });
+}
+async function fetchBlob(url, onProg){
+  const ctrl=new AbortController();
+  const to=setTimeout(()=>ctrl.abort(), 60000);
+  try{
+    const resp=await fetch(url,{signal:ctrl.signal});
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const total=+resp.headers.get('content-length')||0;
+    const reader=resp.body.getReader();
+    const chunks=[]; let got=0;
+    while(true){
+      const {done,value}=await reader.read();
+      if(done) break;
+      chunks.push(value); got+=value.length;
+      if(onProg&&total) onProg(got,total);
+    }
+    return URL.createObjectURL(new Blob(chunks));
+  } finally { clearTimeout(to); }
+}
+async function ensureEngine(){
+  const C=state.comp;
+  if(C.engine==='ready') return;
+  if(C.engine==='loading') { while(C.engine==='loading') await sleep(120); if(C.engine==='ready') return; }
+  C.engine='loading';
+  setEngineUI();
+  $('#engBarWrap').style.display='';
+  const WASM_EST=30.74*1048576;
+  try{
+    // wrapper is vendored same-origin (ffmpeg/) so the classic worker chunk resolves locally;
+    // only the 31 MB core comes from a CDN (with progress + mirrors)
+    await loadScript('ffmpeg/ffmpeg.js');
+    const FFn=window.FFmpegWASM&&window.FFmpegWASM.FFmpeg;
+    if(!FFn) throw new Error('wrapper script failed to define FFmpegWASM');
+    let coreURL='', wasmURL='', coreCdn='';
+    for(const cdn of CORE_CDN){
+      try{
+        coreURL=await fetchBlob(cdn+'/ffmpeg-core.js', (g,t)=>{ $('#engNote').textContent=`ffmpeg-core.js ${fmtBytes(g)} / ${fmtBytes(t)}`; });
+        wasmURL=await fetchBlob(cdn+'/ffmpeg-core.wasm', (g)=>{ $('#engNote').textContent=`ffmpeg-core.wasm ${fmtBytes(g)} / ${fmtBytes(WASM_EST)} (${Math.min(100,Math.round(g/WASM_EST*100))}%)`; $('#engBar').style.width=(g/WASM_EST*100).toFixed(1)+'%'; });
+        coreCdn=cdn; break;
+      }catch(e){ coreURL=wasmURL=''; }
+    }
+    if(!wasmURL) throw new Error('no core CDN reachable');
+    const ff=new FFn();
+    ff.on('log', ({message})=>pushLog(message));
+    ff.on('progress', ({progress})=>{
+      const j=state.comp.jobs&&state.comp.jobs[state.comp.curIdx];
+      if(j){ j.pct=clampN(progress,0,1); renderQueue(); }
+    });
+    await ff.load({ coreURL, wasmURL });
+    C.ff=ff; C.blobs={coreURL,wasmURL};
+    C.engine='ready';
+    $('#engNote').textContent='ffmpeg.wasm core via '+coreCdn.split('/')[2]+' · ready — cached for this session';
+  } catch(err){
+    console.error(err);
+    C.engine='error'; C.errMsg=err.message;
+    $('#engNote').textContent='Engine failed to load: '+err.message+' — check your network and retry.';
+  }
+  $('#engBarWrap').style.display='none';
+  setEngineUI();
+}
+function setEngineUI(){
+  const C=state.comp;
+  const b=$('#engBadge');
+  b.innerHTML= C.engine==='ready' ? t('engReady') : C.engine==='loading' ? t('engLoading') : C.engine==='error' ? t('engErr') : t('engNotLoaded');
+  b.className='badge '+(C.engine==='ready'?'ok':C.engine==='error'?'err':C.engine==='loading'?'acc':'');
+  $('#engBtn').style.display=C.engine==='ready'?'none':'';
+  $('#engBtn').disabled=C.engine==='loading';
+}
+const logLines=[];
+function pushLog(m){ logLines.push(m); if(logLines.length>400) logLines.shift();
+  const el=$('#compLog'); if(el.style.display==='block') { el.textContent=logLines.join('\n'); el.scrollTop=el.scrollHeight; } }
+/* ---------- settings ---------- */
+const FMT_CONF={
+  mp3:  {ext:'mp3', br:[32,320,192]},
+  aac:  {ext:'m4a', br:[32,320,128]},
+  ogg:  {ext:'ogg'},
+  opus: {ext:'opus', br:[16,256,96]},
+  webm: {ext:'webm', br:[16,128,64]},
+  flac: {ext:'flac'},
+  wav:  {ext:'wav'},
+};
+function readOpts(){
+  const fmt=$('#fmtSel').value;
+  return {
+    fmt,
+    br:+$('#brSlider').value,
+    vbr:fmt==='mp3'&&$('#vbrSel').value==='vbr',
+    vbrQ:+$('#vbrQSlider').value,
+    oggQ:+$('#oggQSlider').value,
+    flacL:+$('#flacLSlider').value,
+    wavD:$('#wavSel').value,
+    sr:+$('#srSel').value||0,
+    ch:+$('#chSel').value||0,
+    norm:$('#normChk').checked,
+  };
+}
+function outNameFor(e,o){
+  const base=e.name.replace(/\.[^.]+$/,'');
+  const parts=[];
+  if(o.fmt==='mp3') parts.push(o.vbr?('v'+o.vbrQ):(o.br+'k'));
+  if(o.fmt==='aac') parts.push(o.br+'k');
+  if(o.fmt==='opus') parts.push(o.br+'k');
+  if(o.fmt==='webm') parts.push(o.br+'k');
+  if(o.fmt==='ogg') parts.push('q'+o.oggQ);
+  if(o.fmt==='flac') parts.push('L'+o.flacL);
+  if(o.fmt==='wav') parts.push(o.wavD.replace('pcm_s','').replace('pcm_','').replace('le',''));
+  if(o.sr) parts.push((o.sr/1000)+'k');
+  if(o.ch===1) parts.push('mono');
+  if(o.ch===2) parts.push('st');
+  if(o.norm) parts.push('norm');
+  return base+'.'+parts.join('.')+'.'+FMT_CONF[o.fmt].ext;
+}
+function buildArgs(o, inName, outName){
+  const a=['-y','-i',inName,'-vn'];
+  switch(o.fmt){
+    case 'mp3': a.push('-c:a','libmp3lame'); if(o.vbr) a.push('-q:a',String(o.vbrQ)); else a.push('-b:a',o.br+'k'); break;
+    case 'aac': a.push('-c:a','aac','-b:a',o.br+'k'); break;
+    case 'ogg': a.push('-c:a','libvorbis','-q:a',String(o.oggQ)); break;
+    case 'opus': a.push('-c:a','libopus','-b:a',o.br+'k'); break;
+    case 'webm': a.push('-c:a','libopus','-b:a',o.br+'k'); break;
+    case 'flac': a.push('-c:a','flac','-compression_level',String(o.flacL)); break;
+    case 'wav': a.push('-c:a',o.wavD); break;
+  }
+  if(o.sr) a.push('-ar',String(o.sr));
+  if(o.ch) a.push('-ac',String(o.ch));
+  if(o.norm) a.push('-af','loudnorm=I=-16:TP=-1.5:LRA=11');
+  a.push(outName);
+  return a;
+}
+function updFmtRows(){
+  const fmt=$('#fmtSel').value;
+  $('#rowBr').style.display=FMT_CONF[fmt].br?'':'none';
+  $('#rowVbr').style.display=fmt==='mp3'?'':'none';
+  $('#rowVbrQ').style.display=(fmt==='mp3'&&$('#vbrSel').value==='vbr')?'':'none';
+  $('#rowOgg').style.display=fmt==='ogg'?'':'none';
+  $('#rowFlac').style.display=fmt==='flac'?'':'none';
+  $('#rowWav').style.display=fmt==='wav'?'':'none';
+  if(FMT_CONF[fmt].br){
+    const [mn,mx,def]=FMT_CONF[fmt].br;
+    const sl=$('#brSlider');
+    sl.min=mn; sl.max=mx;
+    if(+sl.value<mn||+sl.value>mx) sl.value=def;
+    $('#brVal').textContent=sl.value+' kbps';
+  }
+  updCmd();
+}
+function updCmd(){
+  const e=activeEntry();
+  const o=readOpts();
+  const sample={name:'input.wav', ext:'wav'};
+  const src=e||sample;
+  const inN=src.name;
+  const args=buildArgs(o,inN,outNameFor(src,o)).map(x=>/\s/.test(x)?'"'+x+'"':x);
+  $('#cmdPreview').textContent='ffmpeg '+args.join(' ');
+}
+/* ---------- queue ---------- */
+function renderQueue(){
+  const box=$('#queueBox');
+  const files=state.files;
+  if(!files.length){ box.innerHTML=`<div class="empty" style="padding:22px">${esc(t('queueEmpty'))}</div>`; return; }
+  const jobs=state.comp.jobs||{};
+  box.innerHTML=`<div style="overflow-x:auto"><table class="queue"><thead><tr>
+    <th style="width:30px"><input type="checkbox" id="qAll" checked></th>
+    <th>file</th><th>size</th><th>${esc(t('dContainer'))}</th><th>status</th></tr></thead><tbody>
+    ${files.map((e,i)=>{
+      const j=jobs[i];
+      const st= j? (j.state==='run'? `<span class="dot run"></span> ${Math.round((j.pct||0)*100)}%` : j.state==='done'? `<span class="dot ok"></span> ${esc(t('qDone'))}` : j.state==='err'? `<span class="dot err"></span> ${esc(t('qErr'))}` : esc(t('qPend'))) : esc(t('qPend'));
+      return `<tr><td><input type="checkbox" class="qck" data-i="${i}" ${e._qc===false?'':'checked'}></td>
+        <td class="nm" title="${esc(e.name)}">${esc(e.name)}</td>
+        <td class="mono" style="font-size:12px">${fmtBytes(e.size)}</td>
+        <td><span class="fam ${e.det?e.det.fam:'other'}">${esc(e.det?e.det.name.split(' ')[0]:'?')}</span></td>
+        <td style="font-size:12.5px">${st}</td></tr>`;
+    }).join('')}</tbody></table></div>`;
+  $$('#queueBox .qck').forEach(c=>c.onchange=()=>{ files[+c.dataset.i]._qc=c.checked; });
+  const all=$('#qAll');
+  if(all) all.onchange=()=>{ $$('#queueBox .qck').forEach(c=>{ c.checked=all.checked; files[+c.dataset.i]._qc=all.checked; }); };
+}
+/* ---------- run ---------- */
+async function runQueue(){
+  if(state.comp.engine!=='ready'){ $('#engNote').scrollIntoView({behavior:'smooth',block:'center'}); await ensureEngine(); if(state.comp.engine!=='ready'){ toast(t('cTaskFail')); return; } }
+  const o=readOpts();
+  const jobs=state.files.map((e,i)=>({e,i,state:(e._qc===false?'skip':'pend'),pct:0}));
+  state.comp.jobs={}; jobs.forEach(j=>{ if(j.state!=='skip') state.comp.jobs[j.i]=j; });
+  renderQueue();
+  const runBtn=$('#runBtn'); runBtn.disabled=true;
+  $('#stopBtn2').style.display='';
+  let okCount=0, failCount=0;
+  const results=[];
+  for(const j of jobs){
+    if(j.state==='skip') continue;
+    state.comp.curIdx=j.i;
+    j.state='run'; renderQueue();
+    const e=j.e;
+    const inName='in'+j.i+'.'+(e.ext||'bin');
+    const outN=outNameFor(e,o);
+    try{
+      await state.comp.ff.writeFile(inName, new Uint8Array(e.ab));
+      const args=buildArgs(o,inName,outN);
+      const t0=Date.now();
+      const rc=await state.comp.ff.exec(args);
+      const data=await state.comp.ff.readFile(outN);
+      await state.comp.ff.deleteFile(inName).catch(()=>{});
+      await state.comp.ff.deleteFile(outN).catch(()=>{});
+      if(rc!==0) throw new Error('ffmpeg exit '+rc+' — see log');
+      const blob=new Blob([data.buffer||data], {type:'audio/'+(o.fmt==='aac'?'mp4':o.fmt)});
+      const dur=e.decoded?e.decoded.duration:(e.parsed.duration||0);
+      const elapsed=(Date.now()-t0)/1000;
+      j.state='done';
+      results.push({e, outN, blob, url:URL.createObjectURL(blob), origUrl:URL.createObjectURL(e.file), inSize:e.size, outSize:blob.size, elapsed, dur});
+      okCount++;
+    }catch(err){
+      console.error(err);
+      j.state='err'; j.msg=err.message; failCount++;
+      try{ await state.comp.ff.deleteFile(inName).catch(()=>{}); }catch(e2){}
+    }
+    renderQueue();
+  }
+  state.comp.curIdx=-1;
+  runBtn.disabled=false;
+  $('#stopBtn2').style.display='none';
+  renderResults(results);
+  renderQueue();
+  toast(okCount? t('cTaskDone')+(okCount?' ✓ ('+okCount+')':'') : t('cTaskFail'));
+}
+function renderResults(results){
+  const box=$('#resultsBox');
+  if(!results||!results.length){ return; }
+  state.comp.results=(state.comp.results||[]).concat(results);
+  box.innerHTML=`
+    <h3 style="font-size:16px;margin:20px 0 8px">${esc(t('cTaskDone'))} — ${state.comp.results.length}</h3>
+    ${state.comp.results.slice().reverse().map((r,ri)=>{
+      const saved=(1-r.outSize/r.inSize)*100;
+      const speed=r.dur&&r.elapsed? (r.dur/r.elapsed).toFixed(1):null;
+      return `<div class="rescard">
+        <div class="r1">
+          <span class="rn">${esc(r.outN)}</span>
+          <span class="badge acc">${fmtBytes(r.inSize)} → ${fmtBytes(r.outSize)}</span>
+          <span class="badge ${saved>=0?'ok':'warn'}">${saved>=0?saved.toFixed(1)+'% '+esc(t('rSaved')):Math.abs(saved).toFixed(1)+'% '+esc(t('rBigger'))}</span>
+          ${speed?`<span class="badge">×${speed} realtime</span>`:''}
+          <span style="flex:1"></span>
+          <a class="btn small primary" download="${esc(r.outN)}" href="${r.url}">⬇ ${esc(t('rDl'))}</a>
+          <button class="btn small" data-an="${ri}">🔍 ${esc(t('rAnalyze'))}</button>
+        </div>
+        <div class="ab">
+          <div><label>${esc(t('rOrig'))} · ${esc(r.e.name)}</label><audio controls preload="none" src="${r.origUrl}"></audio></div>
+          <div><label>${esc(t('rNew'))} · ${esc(r.outN)}</label><audio controls preload="none" src="${r.url}"></audio></div>
+        </div>
+      </div>`;
+    }).join('')}`;
+  $$('#resultsBox [data-an]').forEach(btn=>btn.onclick=()=>{
+    const r=state.comp.results[state.comp.results.length-1-(+btn.dataset.an)];
+    const file=new File([r.blob], r.outN, {type:r.blob.type});
+    addFiles([file]);
+    document.querySelector('#analyzer').scrollIntoView({behavior:'smooth'});
+  });
+}
+/* ---------- compressor events ---------- */
+function initCompEvents(){
+  $('#engBtn').onclick=()=>ensureEngine();
+  $('#fmtSel').onchange=updFmtRows;
+  $('#vbrSel').onchange=()=>{ updFmtRows(); };
+  $('#brSlider').oninput=()=>{ $('#brVal').textContent=$('#brSlider').value+' kbps'; updCmd(); };
+  $('#vbrQSlider').oninput=()=>{
+    const q=+$('#vbrQSlider').value;
+    const approx={0:'245',1:'225',2:'190',3:'175',4:'160',5:'130',6:'115',7:'100',8:'85',9:'65'}[q];
+    $('#vbrQVal').textContent='V'+q+' ≈ '+approx+' kbps';
+    updCmd();
+  };
+  $('#oggQSlider').oninput=()=>{
+    const q=+$('#oggQSlider').value;
+    const approx={0:'64',1:'80',2:'96',3:'112',4:'128',5:'160',6:'192',7:'224',8:'256',9:'320'}[q];
+    $('#oggQVal').textContent='q'+q+' ≈ '+approx+' kbps';
+    updCmd();
+  };
+  $('#flacLSlider').oninput=()=>{ $('#flacLVal').textContent=$('#flacLSlider').value; updCmd(); };
+  $('#wavSel').onchange=updCmd; $('#srSel').onchange=updCmd; $('#chSel').onchange=updCmd;
+  $('#normChk').onchange=updCmd;
+  $('#runBtn').onclick=runQueue;
+  $('#stopBtn2').onclick=()=>{
+    if(state.comp.ff){ try{ state.comp.ff.terminate(); }catch(e){} }
+    state.comp.engine='idle'; state.comp.ff=null;
+    setEngineUI();
+    toast('terminated');
+  };
+  $('#logToggle').onclick=()=>{
+    const el=$('#compLog');
+    const show=el.style.display!=='block';
+    el.style.display=show?'block':'none';
+    $('#logToggle').innerHTML=show?t('hideLog'):t('showLog');
+    if(show){ el.textContent=logLines.join('\n'); el.scrollTop=el.scrollHeight; }
+  };
+  $('#cmdCopy').onclick=async()=>{
+    try{ await navigator.clipboard.writeText($('#cmdPreview').textContent); }catch(e){}
+    toast(t('copied'));
+  };
+}
+/* =================================================================== demos */
+const DEMOS=[
+ {g:'speech', file:'speech-44k16.wav', fam:'pcm', container:'WAV', codec:'PCM 16-bit', spec:'44.1 kHz · 2ch · 1411 kbps'},
+ {g:'speech', file:'speech-320k.mp3', fam:'mp3', container:'MP3', codec:'LAME CBR', spec:'320 kbps · 44.1 kHz'},
+ {g:'speech', file:'speech-128k.mp3', fam:'mp3', container:'MP3', codec:'LAME CBR', spec:'128 kbps · 44.1 kHz'},
+ {g:'speech', file:'speech-v0.mp3', fam:'mp3', container:'MP3', codec:'LAME VBR V0', spec:'~145 kbps avg · Xing/LAME tag'},
+ {g:'speech', file:'speech-192k.m4a', fam:'mp4', container:'MP4/M4A', codec:'AAC-LC', spec:'192 kbps · 44.1 kHz · esds/mvhd boxes'},
+ {g:'speech', file:'speech-192k.aac', fam:'mp4', container:'ADTS', codec:'AAC-LC', spec:'192 kbps · raw frame stream'},
+ {g:'speech', file:'speech-q5.ogg', fam:'ogg', container:'Ogg', codec:'Vorbis q5', spec:'~160 kbps · granule duration'},
+ {g:'speech', file:'speech-96k.opus', fam:'ogg', container:'Ogg', codec:'Opus', spec:'96 kbps · 48 kHz internal · OpusHead'},
+ {g:'speech', file:'speech.flac', fam:'lossless', container:'FLAC', codec:'FLAC 16-bit', spec:'44.1 kHz · STREAMINFO/VORBIS_COMMENT'},
+ {g:'speech', file:'speech-opus.webm', fam:'webm', container:'WebM', codec:'Opus', spec:'96 kbps · EBML/Segment boxes'},
+ {g:'sweep', file:'sweep-48k24.wav', fam:'pcm', container:'WAV', codec:'PCM 24-bit', spec:'48 kHz · 2ch · 2304 kbps'},
+ {g:'sweep', file:'sweep-192k.mp3', fam:'mp3', container:'MP3', codec:'LAME CBR', spec:'192 kbps · 48 kHz'},
+ {g:'sweep', file:'sweep-q4.ogg', fam:'ogg', container:'Ogg', codec:'Vorbis q4', spec:'~128 kbps · 48 kHz'},
+ {g:'sweep', file:'sweep.flac', fam:'lossless', container:'FLAC', codec:'FLAC 24-bit', spec:'48 kHz · lossless'},
+ {g:'chord', file:'chord.flac', fam:'lossless', container:'FLAC', codec:'FLAC 16-bit', spec:'reference (lossless)'},
+ {g:'chord', file:'chord-320k.mp3', fam:'mp3', container:'MP3', codec:'LAME CBR', spec:'320 kbps · near transparent'},
+ {g:'chord', file:'chord-64k.mp3', fam:'mp3', container:'MP3', codec:'LAME CBR', spec:'64 kbps · audible artifacts'},
+ {g:'tone', file:'tone-1k-mono.wav', fam:'pcm', container:'WAV', codec:'PCM 16-bit', spec:'1 kHz sine · mono · 44.1 kHz'},
+ {g:'edge', file:'edge-clipped.wav', fam:'pcm', container:'WAV', codec:'PCM 16-bit', spec:'hard-clipped at 0 dBFS'},
+ {g:'edge', file:'edge-dc-offset.wav', fam:'pcm', container:'WAV', codec:'PCM 16-bit', spec:'mono · +0.2 DC offset'},
+ {g:'edge', file:'edge-fake-wav.wav', fam:'mp3', container:'MP3 (renamed)', codec:'MP3 bytes, .wav name', spec:'magic bytes ≠ extension'},
+];
+const DEMO_GROUPS={
+ speech:{name:{en:'Speech — one sentence, 10 formats', zh:'语音 — 同一句话的 10 种格式'}, desc:{en:'Same TTS sentence encoded in 10 containers/codecs. Compare sizes and quality; note Opus decodes at 48 kHz and Ogg carries granule-position durations.', zh:'同一句 TTS 语音以 10 种容器/编码保存。对比体积与音质；注意 Opus 恒定以 48 kHz 解码、Ogg 用 granule 位置表达时长。'}},
+ sweep:{name:{en:'Sweep 20 Hz → 20 kHz', zh:'扫频 20 Hz → 20 kHz'}, desc:{en:'Linear chirp. Generate the spectrogram: lossy versions visibly low-pass around 16–20 kHz — see exactly what the codec threw away.', zh:'线性扫频信号。生成频谱图：有损版本在 16–20 kHz 附近被明显低通 — 直观看到编码器丢掉了什么。'}},
+ chord:{name:{en:'Chord — FLAC vs 320k vs 64k', zh:'和弦 — FLAC vs 320k vs 64k'}, desc:{en:'Same synthesized chord as lossless FLAC and two MP3 bitrates. Listen (or inspect the spectrogram) for artifacts at 64 kbps.', zh:'同一合成和弦的无损 FLAC 与两档 MP3 码率。试听或在频谱图中查看 64 kbps 的损失。'}},
+ tone:{name:{en:'Reference tone', zh:'参考信号'}, desc:{en:'A 1 kHz sine, mono 16-bit — the "hello world" of audio debugging.', zh:'1 kHz 正弦波，单声道 16-bit — 音频调试界的 "hello world"。'}},
+ edge:{name:{en:'Edge cases', zh:'边界案例'}, desc:{en:'Deliberately problematic files: hard clipping, DC offset, and an MP3 wearing a .wav filename (detection trusts magic bytes).', zh:'故意做坏的文件：硬削波、直流偏移，以及披着 .wav 文件名的 MP3（识别只认 magic bytes）。'}},
+};
+function renderDemos(){
+  const box=$('#demoBox');
+  const groups=['speech','sweep','chord','tone','edge'];
+  box.innerHTML=groups.map(g=>{
+    const info=DEMO_GROUPS[g];
+    const rows=DEMOS.map((d,di)=>{
+      if(d.g!==g) return '';
+      const path='demo/'+d.file;
+      return `<tr>
+        <td class="fn">${esc(d.file)}</td>
+        <td><span class="fam ${d.fam}">${esc(d.container)}</span></td>
+        <td style="font-size:12.5px">${esc(d.codec)}</td>
+        <td class="spec">${esc(d.spec)}</td>
+        <td style="white-space:nowrap;text-align:right">
+          <a class="btn small" href="${path}" download>⬇ ${esc(t('download'))}</a>
+          <button class="btn small" data-di="${DEMOS.indexOf(d)}">🔍 ${esc(t('analyze'))}</button>
+        </td></tr>`;
+    }).join('');
+    return `<div class="dgroup"><h3>${esc(pick(info.name))}</h3><p>${esc(pick(info.desc))}</p>
+      <div class="tblscroll"><table class="demos"><thead><tr><th>file</th><th>${esc(t('dContainer'))}</th><th>${esc(t('dCodec'))}</th><th>${esc(t('dBitrate'))} / details</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  }).join('');
+  $$('#demoBox [data-di]').forEach(btn=>btn.onclick=async()=>{
+    const d=DEMOS[+btn.dataset.di];
+    btn.disabled=true; btn.textContent='…';
+    try{
+      const resp=await fetch('demo/'+d.file);
+      if(!resp.ok) throw new Error('HTTP '+resp.status);
+      const blob=await resp.blob();
+      await addFiles([new File([blob], d.file, {type:blob.type||'audio/*'})]);
+      document.querySelector('#analyzer').scrollIntoView({behavior:'smooth'});
+      toast(esc(d.file)+' ✓');
+    }catch(err){ toast('load failed: '+err.message); }
+    btn.disabled=false; btn.innerHTML='🔍 '+esc(t('analyze'));
+  });
+}
+/* =================================================================== tabs */
+function switchTab(name){
+  $$('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  $$('.panel').forEach(p=>p.classList.toggle('active', p.id==='tab-'+name));
+  if(name==='wave') { drawWave(); drawSpecFromCache(activeEntry()); }
+  if(name==='hex') { renderTree(); renderHex(); }
+  if(name==='comp') { renderQueue(); updFmtRows(); }
+}
+/* =================================================================== intake events */
+function initIntake(){
+  const dz=$('#dropzone'), fi=$('#fileInput');
+  dz.onclick=()=>fi.click();
+  dz.onkeydown=ev=>{ if(ev.key==='Enter'||ev.key===' ') fi.click(); };
+  fi.onchange=()=>{ addFiles(fi.files); fi.value=''; };
+  ['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{ e.preventDefault(); dz.classList.add('over'); }));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{ e.preventDefault(); dz.classList.remove('over'); }));
+  dz.addEventListener('drop',e=>{ if(e.dataTransfer&&e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+  document.addEventListener('dragover',e=>e.preventDefault());
+  document.addEventListener('drop',e=>{ e.preventDefault(); if(e.dataTransfer&&e.dataTransfer.files.length&&e.target.closest('#dropzone')===null){ addFiles(e.dataTransfer.files); } });
+  window.addEventListener('paste',e=>{
+    if(e.clipboardData&&e.clipboardData.files.length){ addFiles(e.clipboardData.files); }
+  });
+}
+/* =================================================================== dynamic refresh (language) */
+function refreshDynamic(){
+  updPlayUI();
+  renderDemos();
+  renderQueue();
+  updFmtRows();
+  setEngineUI();
+  const e=activeEntry();
+  if(e&&e.parsed){ renderOverview(); renderTree(); renderHex(); drawWave(); }
+  startTick();
+}
+/* =================================================================== init */
+applyI18n();
+initIntake();
+initWaveEvents();
+initHexEvents();
+initCompEvents();
+renderDemos();
+updFmtRows();
+setEngineUI();
+startTick();
+window.addEventListener('scroll',()=>{ /* placeholder for future scrollspy */ }, {passive:true});
+</script>
+</body>
+</html>
