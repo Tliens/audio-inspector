@@ -2,7 +2,7 @@
 
 Free online audio debugging tools for developers — 100% client-side, nothing ever uploaded.
 
-**Live: https://tliens.github.io/audio-inspector/**
+**Live: https://audio-inspector.kuige.me/**
 
 ## Features
 

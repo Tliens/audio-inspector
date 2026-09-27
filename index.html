@@ -5,24 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Audio Inspector — Online Audio Analyzer, Header Inspector &amp; Compressor</title>
 <meta name="description" content="Inspect audio files entirely in your browser: format detection, container &amp; codec header parsing with a linked hex view, waveform / spectrum / level analysis, demo files in 10+ formats, and compression powered by ffmpeg.wasm. 100% client-side.">
-<link rel="canonical" href="https://tliens.github.io/audio-inspector/">
-<link rel="alternate" hreflang="en" href="https://tliens.github.io/audio-inspector/">
-<link rel="alternate" hreflang="zh" href="https://tliens.github.io/audio-inspector/?lang=zh">
-<link rel="alternate" hreflang="x-default" href="https://tliens.github.io/audio-inspector/">
+<link rel="canonical" href="https://audio-inspector.kuige.me/">
+<link rel="alternate" hreflang="en" href="https://audio-inspector.kuige.me/">
+<link rel="alternate" hreflang="zh" href="https://audio-inspector.kuige.me/?lang=zh">
+<link rel="alternate" hreflang="x-default" href="https://audio-inspector.kuige.me/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Audio Inspector">
 <meta property="og:title" content="Audio Inspector — Online Audio Analyzer, Header Inspector &amp; Compressor">
 <meta property="og:description" content="Format detection, header parsing with hex view, waveform / spectrum / level analysis, demo files, ffmpeg.wasm compression — all in your browser, nothing uploaded.">
-<meta property="og:url" content="https://tliens.github.io/audio-inspector/">
-<meta property="og:image" content="https://tliens.github.io/audio-inspector/og-image.png">
+<meta property="og:url" content="https://audio-inspector.kuige.me/">
+<meta property="og:image" content="https://audio-inspector.kuige.me/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Audio Inspector — Online Audio Analyzer &amp; Compressor">
 <meta name="twitter:description" content="Audio format analysis, header/hex inspection, waveform &amp; spectrum, demo files and compression — 100% client-side.">
-<meta name="twitter:image" content="https://tliens.github.io/audio-inspector/og-image.png">
+<meta name="twitter:image" content="https://audio-inspector.kuige.me/og-image.png">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f46e5'/%3E%3Cg fill='white'%3E%3Crect x='10' y='26' width='5' height='12' rx='2.5'/%3E%3Crect x='19' y='18' width='5' height='28' rx='2.5'/%3E%3Crect x='28' y='8' width='5' height='48' rx='2.5'/%3E%3Crect x='37' y='16' width='5' height='32' rx='2.5'/%3E%3Crect x='46' y='24' width='5' height='16' rx='2.5'/%3E%3C/g%3E%3C/svg%3E">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebApplication","name":"Audio Inspector","url":"https://tliens.github.io/audio-inspector/","applicationCategory":"DeveloperApplication","operatingSystem":"Any (browser)","description":"Free online audio debugging tool for developers: audio format analysis, file header parsing with hex view, waveform, spectrum and level analysis, multi-format demo downloads and audio compression via ffmpeg.wasm. Runs 100% client-side.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Audio format detection","Container and codec header parsing","Hex viewer with structure linking","Waveform and spectrogram","Peak/RMS/clipping/DC offset analysis","Demo audio files in 10+ formats","Audio compression and format conversion via ffmpeg.wasm"]}
+{"@context":"https://schema.org","@type":"WebApplication","name":"Audio Inspector","url":"https://audio-inspector.kuige.me/","applicationCategory":"DeveloperApplication","operatingSystem":"Any (browser)","description":"Free online audio debugging tool for developers: audio format analysis, file header parsing with hex view, waveform, spectrum and level analysis, multi-format demo downloads and audio compression via ffmpeg.wasm. Runs 100% client-side.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Audio format detection","Container and codec header parsing","Hex viewer with structure linking","Waveform and spectrogram","Peak/RMS/clipping/DC offset analysis","Demo audio files in 10+ formats","Audio compression and format conversion via ffmpeg.wasm"]}
 </script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
@@ -461,7 +461,7 @@ footer.site .fin{display:flex;justify-content:space-between;gap:14px;flex-wrap:w
 <footer class="site">
   <div class="wrap fin">
     <div>🔊 <b>Audio Inspector</b> — <span data-i18n="footTag">free online audio debugging tools. Demo files CC0. Single-file site: view source, fork it, self-host it.</span></div>
-    <div><a href="https://github.com/Tliens/audio-inspector" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/Tliens" target="_blank" rel="noopener">@Tliens</a> · <a href="https://x.com/shi_kui8457" target="_blank" rel="noopener">X (Twitter)</a> · <a href="https://tliens.github.io/" target="_blank" rel="noopener">更多作品</a></div>
+    <div><a href="https://github.com/Tliens/audio-inspector" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/Tliens" target="_blank" rel="noopener">@Tliens</a> · <a href="https://x.com/shi_kui8457" target="_blank" rel="noopener">X (Twitter)</a> · <a href="https://kuige.me/" target="_blank" rel="noopener">更多作品</a></div>
   </div>
 </footer>
 <div class="toast" id="toast"></div>
@@ -1919,7 +1919,7 @@ function buildReport(e){
   L.push(`${t('repStruct')}: ${p.structure.map(n=>n.label).join(' > ')}`);
   if(p.tags.length) L.push(`${t('repTags')}: ${p.tags.map(x=>x.k+'='+x.v).join('; ').slice(0,400)}`);
   for(const w of p.warnings) L.push('WARN: '+(typeof w==='string'?w:pick(w)));
-  L.push(`${t('repGenerated')} Audio Inspector — https://tliens.github.io/audio-inspector/`);
+  L.push(`${t('repGenerated')} Audio Inspector — https://audio-inspector.kuige.me/`);
   return L.join('\n');
 }
 async function copyReport(e){
